@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageSquare, X, Send, User as UserIcon } from 'lucide-react';
 import { ChatMessage, User } from '../types';
+import { chatService } from '../services/chatService';
 
 interface ChatWidgetProps {
   processId: string;
@@ -11,18 +12,7 @@ interface ChatWidgetProps {
 export const ChatWidget: React.FC<ChatWidgetProps> = ({ processId, currentUser, recipientName }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [message, setMessage] = useState('');
-  // Mock initial messages - in real app fetch from Supabase
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'm1',
-      process_id: processId,
-      sender_id: 'system',
-      sender_name: 'Sistema',
-      role: 'admin',
-      content: 'Chat iniciado. Tire suas dúvidas aqui.',
-      timestamp: new Date(Date.now() - 86400000).toISOString()
-    }
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -30,15 +20,38 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ processId, currentUser, 
   };
 
   useEffect(() => {
-    if (isOpen) scrollToBottom();
-  }, [messages, isOpen]);
+    if (isOpen) {
+      scrollToBottom();
+      // Carregar mensagens iniciais
+      chatService.getMessages(processId).then(setMessages);
+
+      // Inscrever no Realtime
+      const subscription = chatService.subscribeToMessages(processId, (newMsg) => {
+        setMessages(prev => {
+          // Evita duplicatas se o sender for o próprio usuário (já adicionado otimisticamente ou pelo retorno do insert)
+          if (prev.some(m => m.id === newMsg.id)) return prev;
+          return [...prev, newMsg];
+        });
+        scrollToBottom();
+      });
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    }
+  }, [isOpen, processId]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim()) return;
 
+    const tempId = Date.now().toString();
     const newMessage: ChatMessage = {
-      id: Date.now().toString(),
+      id: tempId,
       process_id: processId,
       sender_id: currentUser.id,
       sender_name: currentUser.name,
@@ -47,29 +60,28 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ processId, currentUser, 
       timestamp: new Date().toISOString()
     };
 
-    setMessages([...messages, newMessage]);
+    // Optimistic update
+    setMessages(prev => [...prev, newMessage]);
     setMessage('');
-    
-    // Simulate reply if user is client
-    if (currentUser.role === 'client') {
-        setTimeout(() => {
-            const reply: ChatMessage = {
-                id: (Date.now() + 1).toString(),
-                process_id: processId,
-                sender_id: 'attendant',
-                sender_name: 'Ana Atendente',
-                role: 'attendant',
-                content: 'Recebemos sua mensagem. Analisaremos em breve.',
-                timestamp: new Date().toISOString()
-            };
-            setMessages(prev => [...prev, reply]);
-        }, 2000);
-    }
+
+    // Send to backend
+    chatService.sendMessage({
+      process_id: processId,
+      sender_id: currentUser.id,
+      sender_name: currentUser.name,
+      role: currentUser.role,
+      content: newMessage.content
+    }).then(sentMsg => {
+      if (sentMsg) {
+        // Update temp ID with real ID if needed, or just let realtime handle it (but we filter dups)
+        setMessages(prev => prev.map(m => m.id === tempId ? sentMsg : m));
+      }
+    });
   };
 
   if (!isOpen) {
     return (
-      <button 
+      <button
         onClick={() => setIsOpen(true)}
         className="fixed bottom-24 right-6 w-14 h-14 bg-amber-500 hover:bg-amber-600 text-white rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-105 z-[90]"
       >
@@ -96,26 +108,25 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ processId, currentUser, 
         {messages.map((msg) => {
           const isMe = msg.sender_id === currentUser.id;
           const isSystem = msg.sender_id === 'system';
-          
+
           if (isSystem) {
-              return (
-                  <div key={msg.id} className="flex justify-center my-2">
-                      <span className="text-[10px] bg-slate-200 text-slate-500 px-2 py-1 rounded-full">{msg.content}</span>
-                  </div>
-              );
+            return (
+              <div key={msg.id} className="flex justify-center my-2">
+                <span className="text-[10px] bg-slate-200 text-slate-500 px-2 py-1 rounded-full">{msg.content}</span>
+              </div>
+            );
           }
 
           return (
             <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[80%] p-3 rounded-lg text-sm ${
-                isMe 
-                  ? 'bg-amber-500 text-white rounded-tr-none' 
+              <div className={`max-w-[80%] p-3 rounded-lg text-sm ${isMe
+                  ? 'bg-amber-500 text-white rounded-tr-none'
                   : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none'
-              }`}>
+                }`}>
                 {!isMe && <p className="text-[10px] font-bold mb-1 text-slate-400">{msg.sender_name}</p>}
                 <p>{msg.content}</p>
                 <p className={`text-[10px] mt-1 text-right ${isMe ? 'text-amber-100' : 'text-slate-400'}`}>
-                  {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                  {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </p>
               </div>
             </div>
@@ -126,15 +137,15 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ processId, currentUser, 
 
       {/* Input Area */}
       <form onSubmit={handleSend} className="p-3 border-t border-slate-100 bg-white flex gap-2">
-        <input 
-          type="text" 
+        <input
+          type="text"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder="Digite sua mensagem..." 
+          placeholder="Digite sua mensagem..."
           className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
         />
-        <button 
-          type="submit" 
+        <button
+          type="submit"
           disabled={!message.trim()}
           className="bg-slate-900 hover:bg-slate-800 text-white p-2 rounded-lg disabled:opacity-50 transition-colors"
         >

@@ -1,8 +1,9 @@
 import { supabase } from '../lib/supabaseClient';
 import { Process, ProcessDocument, KPIMetrics } from '../types';
+import { notificationService } from './notificationService';
 
 export const dataService = {
-  
+
   // --- PROCESSES ---
 
   async getProcesses(userRole: string, userId: string, userEmail?: string): Promise<Process[]> {
@@ -87,11 +88,11 @@ export const dataService = {
         name: d.name,
         status: 'pending'
       }));
-      
+
       const { error: docError } = await supabase
         .from('process_documents')
         .insert(docsToInsert);
-        
+
       if (docError) console.error("Error creating docs:", docError);
     }
 
@@ -100,6 +101,33 @@ export const dataService = {
 
   async updateProcessStatus(processId: string, status: string) {
     await supabase.from('processes').update({ status, updated_at: new Date() }).eq('id', processId);
+
+    // Notify Client
+    const { data: process } = await supabase.from('processes').select('client_id').eq('id', processId).single();
+    if (process && process.client_id) {
+      const statusMap: Record<string, string> = {
+        'analysis': 'Em Análise',
+        'pending_docs': 'Pendência de Documentos',
+        'approved': 'Aprovado',
+        'rejected': 'Reprovado',
+        'contract': 'Contrato'
+      };
+      await notificationService.createNotification(
+        process.client_id,
+        'Atualização de Status',
+        `Seu processo mudou para: ${statusMap[status] || status}`,
+        status === 'rejected' ? 'error' : status === 'approved' ? 'success' : 'info'
+      );
+    }
+  },
+
+  async updateProcessFields(processId: string, extraFields: any[]) {
+    const { error } = await supabase
+      .from('processes')
+      .update({ extra_fields: extraFields, updated_at: new Date() })
+      .eq('id', processId);
+
+    if (error) throw error;
   },
 
   // --- DOCUMENTS ---
@@ -114,8 +142,29 @@ export const dataService = {
         uploaded_at: updates.uploaded_at
       })
       .eq('id', docId);
-      
+
     if (error) throw error;
+
+    // Notify Client if rejected or approved
+    if (updates.status === 'rejected' || updates.status === 'approved') {
+      const { data: doc } = await supabase.from('process_documents').select('process_id, name').eq('id', docId).single();
+      if (doc) {
+        const { data: process } = await supabase.from('processes').select('client_id').eq('id', doc.process_id).single();
+        if (process && process.client_id) {
+          const title = updates.status === 'rejected' ? 'Documento Recusado' : 'Documento Aprovado';
+          const msg = updates.status === 'rejected'
+            ? `O documento "${doc.name}" foi recusado. Motivo: ${updates.feedback || 'Não informado'}`
+            : `O documento "${doc.name}" foi aprovado.`;
+
+          await notificationService.createNotification(
+            process.client_id,
+            title,
+            msg,
+            updates.status === 'rejected' ? 'error' : 'success'
+          );
+        }
+      }
+    }
   },
 
   async addDocument(processId: string, name: string) {
@@ -131,10 +180,18 @@ export const dataService = {
   },
 
   // --- METRICS ---
-  
+
+  async addAttendantEmail(email: string) {
+    const { error } = await supabase
+      .from('attendant_emails')
+      .insert({ email });
+
+    if (error) throw error;
+  },
+
   async getMetrics(): Promise<KPIMetrics> {
     const { data } = await supabase.from('processes').select('status');
-    
+
     if (!data) return { total: 0, analysis: 0, approved: 0, rejected: 0, monthly_volume: [] };
 
     const total = data.length;
@@ -145,8 +202,8 @@ export const dataService = {
     return {
       total, analysis, approved, rejected,
       monthly_volume: [
-          // Mock simples para gráfico
-          { name: 'Jan', value: 12 }, { name: 'Fev', value: 19 }, { name: 'Mar', value: 30 } 
+        // Mock simples para gráfico
+        { name: 'Jan', value: 12 }, { name: 'Fev', value: 19 }, { name: 'Mar', value: 30 }
       ]
     };
   }

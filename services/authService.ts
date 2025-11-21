@@ -2,9 +2,9 @@ import { supabase } from '../lib/supabaseClient';
 import { User, UserRole } from '../types';
 
 export const authService = {
-  
+
   loginWithPassword: async (email: string, password: string): Promise<{ user: User | null; error: string | null }> => {
-     try {
+    try {
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password
@@ -19,13 +19,13 @@ export const authService = {
         .select('*')
         .eq('id', authData.user.id)
         .single();
-      
+
       // HARDCODE DE SEGURANÇA: Se for o David, força ADMIN
       let role: UserRole = 'client';
-      if (authData.user.email === 'david@creditoprime.com.br') {
-          role = 'admin';
+      if (authData.user.email?.toLowerCase() === 'david@creditoprime.com.br') {
+        role = 'admin';
       } else if (profile && profile.role) {
-          role = profile.role as UserRole;
+        role = profile.role as UserRole;
       }
 
       // Nome Fallback
@@ -40,9 +40,9 @@ export const authService = {
       };
 
       return { user, error: null };
-     } catch (e: any) {
-       return { user: null, error: e.message };
-     }
+    } catch (e: any) {
+      return { user: null, error: e.message };
+    }
   },
 
   register: async (email: string, password: string, name: string): Promise<{ user: User | null; error: string | null }> => {
@@ -64,11 +64,11 @@ export const authService = {
           id: authData.user.id,
           email: email,
           name: name,
-          role: 'client' // Padrão
+          role: 'client' // O Trigger do banco vai mudar para 'attendant' se o email estiver autorizado
         });
 
       if (profileError) {
-          console.error('Erro ao criar perfil:', profileError);
+        console.error('Erro ao criar perfil:', profileError);
       }
 
       const user: User = {
@@ -101,10 +101,10 @@ export const authService = {
 
     // HARDCODE DE SEGURANÇA: Se for o David, força ADMIN
     let role: UserRole = 'client';
-    if (session.user.email === 'david@creditoprime.com.br') {
-        role = 'admin';
+    if (session.user.email?.toLowerCase() === 'david@creditoprime.com.br') {
+      role = 'admin';
     } else if (profile && profile.role) {
-        role = profile.role as UserRole;
+      role = profile.role as UserRole;
     }
 
     return {

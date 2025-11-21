@@ -1,34 +1,50 @@
+import { supabase } from '../lib/supabaseClient';
 import { Notification } from '../types';
 
-// Armazenamento local temporário (reseta ao atualizar página)
-// Em produção, idealmente conectaríamos a uma tabela 'notifications' no Supabase
-let LOCAL_NOTIFICATIONS: Notification[] = [];
-
 export const notificationService = {
-  getNotifications: (userId: string): Notification[] => {
-    return LOCAL_NOTIFICATIONS.filter(n => n.user_id === userId).sort((a, b) => 
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
+  // Buscar notificações (Realtime será adicionado no componente Layout)
+  getNotifications: async (userId: string): Promise<Notification[]> => {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    if (error) {
+      console.error('Erro ao buscar notificações:', error);
+      return [];
+    }
+
+    return data.map(n => ({
+      id: n.id,
+      user_id: n.user_id,
+      title: n.title,
+      message: n.message,
+      read: n.read,
+      created_at: n.created_at,
+      type: n.type
+    }));
   },
 
-  markAsRead: (notificationId: string) => {
-    LOCAL_NOTIFICATIONS = LOCAL_NOTIFICATIONS.map(n => 
-      n.id === notificationId ? { ...n, read: true } : n
-    );
+  // Marcar como lida
+  markAsRead: async (notificationId: string) => {
+    await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('id', notificationId);
   },
 
-  sendNotification: (toUserId: string, title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
-    const newNotif: Notification = {
-      id: Math.random().toString(36).substr(2, 9),
-      user_id: toUserId,
-      title,
-      message,
-      read: false,
-      created_at: new Date().toISOString(),
-      type
-    };
-    
-    LOCAL_NOTIFICATIONS.unshift(newNotif);
-    return true;
+  // Criar notificação (usado pelo sistema ao mudar status)
+  createNotification: async (userId: string, title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
+    await supabase
+      .from('notifications')
+      .insert({
+        user_id: userId,
+        title,
+        message,
+        type,
+        read: false
+      });
   }
 };
