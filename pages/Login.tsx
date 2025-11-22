@@ -55,7 +55,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-white">
       {/* Left Side - Visual / Branding */}
-      <div className="hidden md:flex w-1/2 bg-slate-900 text-white flex-col justify-between p-12 relative overflow-hidden">
+      <div className="hidden md:flex w-1/2 bg-slate-900 text-white flex-col justify-between p-12 relative overflow-hidden items-center text-center">
         {/* Background Image Overlay */}
         <div className="absolute top-0 left-0 w-full h-full bg-[url('https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80')] bg-cover bg-center opacity-10"></div>
 
@@ -94,11 +94,11 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       {/* Right Side - Form */}
       <div className="w-full md:w-1/2 flex items-center justify-center p-8 bg-white">
         <div className="w-full max-w-md">
-          <div className="mb-8 text-center md:text-left">
+          <div className="mb-8 text-center">
             <img
               src="/logo-prime-horizontal.png"
               alt="Prime Correspondente Caixa"
-              className="h-48 w-auto object-contain mb-6 mx-auto md:mx-0"
+              className="h-48 w-auto object-contain mb-6 mx-auto"
               onError={(e) => {
                 e.currentTarget.style.display = 'none';
                 const fb = document.getElementById('logo-fallback-login-right');

@@ -12,6 +12,7 @@ import {
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Process, CustomField, ProcessDocument, KPIMetrics } from '../types';
 import Tesseract from 'tesseract.js';
+import { useLocation } from 'react-router-dom';
 
 type AdminTab = 'dashboard' | 'processes' | 'new_client' | 'settings';
 
@@ -31,6 +32,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
     const [metrics, setMetrics] = useState<KPIMetrics>({ total: 0, analysis: 0, approved: 0, rejected: 0, monthly_volume: [] });
     const [processes, setProcesses] = useState<Process[]>([]);
     const [loading, setLoading] = useState(true);
+    const location = useLocation();
 
     const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null);
     const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -54,12 +56,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
         loadData();
 
         // Check URL params for tab
-        const params = new URLSearchParams(window.location.search);
+        const params = new URLSearchParams(location.search);
         const tab = params.get('tab');
         if (tab && ['dashboard', 'processes', 'new_client', 'settings'].includes(tab)) {
             setActiveTab(tab as AdminTab);
         }
-    }, [window.location.search]);
+    }, [location.search]);
 
     const loadData = async () => {
         setLoading(true);
@@ -164,21 +166,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
             const text = result.data.text;
             console.log("OCR Result:", text);
 
-            // Simple heuristics to find Name and CPF (Very basic)
-            // In a real app, use Regex or specific document parsers
-            const lines = text.split('\n');
+            // Simple heuristics
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
             let foundName = '';
             let foundCPF = '';
+            let foundDob = '';
+            let foundRg = '';
+            let foundOrg = '';
+            let foundMothersName = '';
+            let foundFathersName = '';
+            let foundNaturalness = '';
+            let foundDispatchDate = '';
 
-            // Try to find CPF format
+            // CPF
             const cpfRegex = /\d{3}\.?\d{3}\.?\d{3}-?\d{2}/;
             const cpfMatch = text.match(cpfRegex);
             if (cpfMatch) foundCPF = cpfMatch[0];
 
-            // Try to find name (Assuming it's often in uppercase and long)
-            // This is just a guess, user will verify
-            const possibleName = lines.find(l => l.length > 10 && l === l.toUpperCase() && !l.includes('REPÚBLICA') && !l.includes('IDENTIDADE'));
-            if (possibleName) foundName = possibleName;
+            // Dates (DD/MM/YYYY)
+            const dateRegex = /\d{2}\/\d{2}\/\d{4}/g;
+            const dates = text.match(dateRegex);
+            if (dates && dates.length > 0) {
+                // Heuristic: First date usually DOB, second might be dispatch date
+                foundDob = dates[0];
+                if (dates.length > 1) foundDispatchDate = dates[dates.length - 1]; // Last date often dispatch
+            }
+
+            // Name (Uppercase, long, not keywords)
+            // Strategy: Look for the longest uppercase line that isn't a known keyword
+            const ignoreWords = ['REPÚBLICA', 'FEDERATIVA', 'BRASIL', 'IDENTIDADE', 'VALIDA', 'TERRITÓRIO', 'NACIONAL', 'MINISTÉRIO', 'CARTEIRA', 'HABILITAÇÃO', 'FILIAÇÃO', 'NOME', 'DATA', 'NASCIMENTO', 'NATURALIDADE', 'DOC.'];
+
+            const potentialNames = lines.filter(l =>
+                l.length > 10 &&
+                l === l.toUpperCase() &&
+                !/\d/.test(l) && // No numbers
+                !ignoreWords.some(w => l.includes(w))
+            );
+
+            if (potentialNames.length > 0) {
+                foundName = potentialNames[0]; // Best guess for own name
+
+                // If we have more potential names, they might be parents
+                // This is very loose, but better than nothing
+                if (potentialNames.length > 1) foundMothersName = potentialNames[1];
+                if (potentialNames.length > 2) foundFathersName = potentialNames[2];
+            }
+
+            // RG (Simple check for digits, maybe preceded by RG)
+            const rgRegex = /\b\d{1,2}\.?\d{3}\.?\d{3}-?[0-9X]\b/;
+            const rgMatch = text.match(rgRegex);
+            if (rgMatch && rgMatch[0] !== foundCPF) foundRg = rgMatch[0];
+
+            // Orgão Emissor (SSP, DETRAN)
+            if (text.includes('SSP')) foundOrg = 'SSP';
+            else if (text.includes('DETRAN')) foundOrg = 'DETRAN';
+            else if (text.includes('S.S.P')) foundOrg = 'SSP';
+
+            // Naturalness (Look for city/state pattern or keywords)
+            // Hard to detect without a city database, but let's look for lines with "/" that aren't dates
+            const naturalnessLine = lines.find(l => l.includes('/') && !/\d/.test(l) && l.length < 30);
+            if (naturalnessLine) foundNaturalness = naturalnessLine;
 
             if (foundName || foundCPF) {
                 setNewClient(prev => ({
@@ -186,7 +233,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
                     name: foundName || prev.name,
                     cpf: foundCPF || prev.cpf
                 }));
-                alert('Dados lidos do documento! Por favor, verifique e complete as informações.');
+
+                // Add extra fields
+                const newExtras = [...customFields];
+                if (foundDob) newExtras.push({ label: 'Data de Nascimento', value: foundDob });
+                if (foundRg) newExtras.push({ label: 'RG', value: foundRg });
+                if (foundOrg) newExtras.push({ label: 'Órgão Emissor', value: foundOrg });
+                if (foundDispatchDate) newExtras.push({ label: 'Data de Expedição', value: foundDispatchDate });
+                if (foundMothersName) newExtras.push({ label: 'Nome da Mãe', value: foundMothersName });
+                if (foundFathersName) newExtras.push({ label: 'Nome do Pai', value: foundFathersName });
+                if (foundNaturalness) newExtras.push({ label: 'Naturalidade', value: foundNaturalness });
+
+                setCustomFields(newExtras);
+
+                alert('Dados lidos! Verifique Nome, CPF e os Campos Adicionais (Filiação, Naturalidade, etc).');
             } else {
                 alert('Não foi possível identificar os dados automaticamente. Por favor, preencha manualmente.');
             }
