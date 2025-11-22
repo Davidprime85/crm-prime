@@ -154,42 +154,61 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
     const handleCreateClient = async (e: React.FormEvent) => {
         e.preventDefault();
         setCreating(true);
-        const newId = `PROC-${Math.floor(Math.random() * 10000)}`;
 
-        // Add participants to extra fields for now, or a specific JSON field if DB supported
-        const participantFields = participants.map((p, i) => ({
-            label: `Participante ${i + 1} (${p.role})`,
-            value: `${p.name} - CPF: ${p.cpf} - Renda: ${p.income}`
-        }));
+        try {
+            // 1. Create Auth User (via API/Supabase Auth)
+            // Note: In a real app with Supabase, we'd use a server function to create the user
+            // without logging out the admin. For this demo, we simulate success or use a specific endpoint.
+            // Assuming authService.register handles this or we just create DB record first.
 
-        const newProcess: Partial<Process> = {
-            id: newId,
-            client_name: newClient.name,
-            client_email: newClient.email,
-            client_cpf: newClient.cpf,
-            type: newClient.type,
-            value: parseFloat(newClient.value) || 0,
-            documents: [
-                { id: 'temp1', name: 'RG e CPF', status: 'pending' },
-                { id: 'temp2', name: 'Comprovante de Renda', status: 'pending' },
-                { id: 'temp3', name: 'Comprovante de Residência', status: 'pending' }
-            ],
-            extra_fields: [...customFields, ...participantFields]
-        };
+            const { user, error } = await authService.register(newClient.email, '123456', newClient.name, 'client');
 
-        const result = await dataService.createProcess(newProcess);
+            if (error) throw error;
 
-        if (result.success) {
-            alert(`Cliente ${newClient.name} pré-cadastrado com sucesso!\n\nPeça para o cliente criar uma conta no site com o e-mail: ${newClient.email} para acessar o processo.`);
-            setNewClient({ name: '', cpf: '', email: '', phone: '', value: '', type: 'Minha Casa Minha Vida' });
-            setCustomFields([]);
-            setParticipants([]);
-            setActiveTab('processes');
-            loadData();
-        } else {
-            alert(`Erro: ${result.error}`);
+            if (user) {
+                // 2. Create Process
+                const newProcess: Partial<Process> = {
+                    client_id: user.id,
+                    client_name: newClient.name,
+                    client_email: newClient.email,
+                    client_cpf: newClient.cpf,
+                    type: newClient.type as any,
+                    value: parseFloat(newClient.value) || 0,
+                    extra_fields: customFields.length > 0 ? customFields : undefined
+                };
+
+                // Add participants to extra fields if any
+                if (participants.length > 0) {
+                    const participantsStr = JSON.stringify(participants);
+                    newProcess.extra_fields = [
+                        ...(newProcess.extra_fields || []),
+                        { label: 'Participantes', value: participantsStr }
+                    ];
+                }
+
+                const { success, error: procError } = await dataService.createProcess(newProcess);
+
+                if (!success) throw new Error(procError);
+
+                // 3. Send Welcome Email
+                await emailService.sendWelcomeEmail(newClient.name, newClient.email, '123456');
+
+                alert('Cliente cadastrado com sucesso! E-mail de boas-vindas enviado.');
+                setActiveTab('processes');
+                loadData();
+
+                // Reset form
+                setNewClient({ name: '', cpf: '', email: '', phone: '', value: '', type: 'Minha Casa Minha Vida' });
+                setCustomFields([]);
+                setParticipants([]);
+            }
+
+        } catch (err: any) {
+            console.error(err);
+            alert('Erro ao cadastrar cliente: ' + (err.message || 'Erro desconhecido'));
+        } finally {
+            setCreating(false);
         }
-        setCreating(false);
     };
 
     // --- Logic for Attendant Invitation ---
