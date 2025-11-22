@@ -207,31 +207,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
 
     // --- Views ---
 
-    const renderOverview = () => (
-        <div className="space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard title="Total de Processos" value={metrics.total} icon={FileText} color="slate" />
-                <StatCard title="Em Análise" value={metrics.analysis} icon={AlertCircle} color="blue" />
-                <StatCard title="Aprovados" value={metrics.approved} icon={CheckCircle} color="green" />
-                <StatCard title="Reprovados" value={metrics.rejected} icon={AlertCircle} color="red" />
-            </div>
+    const renderOverview = () => {
+        // Calculate VGV (Valor Geral de Vendas) - Sum of approved processes
+        const vgv = processes
+            .filter(p => p.status === 'approved')
+            .reduce((sum, p) => sum + p.value, 0);
 
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                <h3 className="text-lg font-bold text-slate-900 mb-6">Volume Mensal (Simulado)</h3>
-                <div className="h-72">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={metrics.monthly_volume}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} />
-                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} />
-                            <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                            <Bar dataKey="value" fill="#0f172a" radius={[4, 4, 0, 0]} barSize={32} />
-                        </BarChart>
-                    </ResponsiveContainer>
+        return (
+            <div className="space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <StatCard title="Total de Processos" value={metrics.total} icon={FileText} color="slate" />
+                    <StatCard title="Em Análise" value={metrics.analysis} icon={AlertCircle} color="blue" />
+                    <StatCard title="Aprovados" value={metrics.approved} icon={CheckCircle} color="green" />
+                    <StatCard title="VGV Aprovado" value={`R$ ${vgv.toLocaleString()}`} icon={Briefcase} color="amber" />
+                </div>
+
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                    <h3 className="text-lg font-bold text-slate-900 mb-6">Volume Mensal (Simulado)</h3>
+                    <div className="h-72">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={metrics.monthly_volume}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} />
+                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} />
+                                <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                <Bar dataKey="value" fill="#0f172a" radius={[4, 4, 0, 0]} barSize={32} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
             </div>
-        </div>
-    );
+        );
+    };
+
+    const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
 
     const renderProcesses = () => {
         if (selectedProcess) {
@@ -355,7 +364,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
             <div className="space-y-6">
                 <div className="flex justify-between items-center">
                     <h3 className="text-xl font-bold">Gestão de Processos</h3>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-center">
+                        <div className="bg-slate-100 p-1 rounded-lg flex text-sm mr-4">
+                            <button
+                                onClick={() => setViewMode('list')}
+                                className={`px-3 py-1 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}
+                            >
+                                Lista
+                            </button>
+                            <button
+                                onClick={() => setViewMode('kanban')}
+                                className={`px-3 py-1 rounded-md transition-all ${viewMode === 'kanban' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}
+                            >
+                                Kanban
+                            </button>
+                        </div>
+
                         <button onClick={() => setFilterStatus('all')} className={`px-3 py-1 rounded-lg text-sm ${filterStatus === 'all' ? 'bg-slate-900 text-white' : 'bg-white border'}`}>Todos</button>
                         <button onClick={() => setFilterStatus('analysis')} className={`px-3 py-1 rounded-lg text-sm ${filterStatus === 'analysis' ? 'bg-blue-600 text-white' : 'bg-white border'}`}>Análise</button>
                     </div>
@@ -364,40 +388,74 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
                 {loading ? (
                     <div className="text-center py-10"><Loader2 className="animate-spin mx-auto" /> Carregando processos...</div>
                 ) : (
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-slate-50 text-slate-500 font-medium">
-                                <tr>
-                                    <th className="px-6 py-4">Cliente</th>
-                                    <th className="px-6 py-4">Tipo</th>
-                                    <th className="px-6 py-4">Status</th>
-                                    <th className="px-6 py-4 text-right">Ação</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {processes.length === 0 && (
-                                    <tr>
-                                        <td colSpan={4} className="px-6 py-8 text-center text-slate-400">Nenhum processo encontrado.</td>
-                                    </tr>
-                                )}
-                                {processes.filter(p => filterStatus === 'all' || p.status === filterStatus).map((process) => (
-                                    <tr key={process.id} className="hover:bg-slate-50/50">
-                                        <td className="px-6 py-4 font-medium">{process.client_name}</td>
-                                        <td className="px-6 py-4 text-slate-500">{process.type}</td>
-                                        <td className="px-6 py-4"><StatusBadge status={process.status} /></td>
-                                        <td className="px-6 py-4 text-right">
-                                            <button
-                                                onClick={() => setSelectedProcessId(process.id)}
-                                                className="text-amber-600 hover:text-amber-700 font-bold"
-                                            >
-                                                Gerenciar
-                                            </button>
-                                        </td>
-                                    </tr>
+                    <>
+                        {viewMode === 'list' ? (
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-slate-50 text-slate-500 font-medium">
+                                        <tr>
+                                            <th className="px-6 py-4">Cliente</th>
+                                            <th className="px-6 py-4">Tipo</th>
+                                            <th className="px-6 py-4">Status</th>
+                                            <th className="px-6 py-4 text-right">Ação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {processes.length === 0 && (
+                                            <tr>
+                                                <td colSpan={4} className="px-6 py-8 text-center text-slate-400">Nenhum processo encontrado.</td>
+                                            </tr>
+                                        )}
+                                        {processes.filter(p => filterStatus === 'all' || p.status === filterStatus).map((process) => (
+                                            <tr key={process.id} className="hover:bg-slate-50/50">
+                                                <td className="px-6 py-4 font-medium">{process.client_name}</td>
+                                                <td className="px-6 py-4 text-slate-500">{process.type}</td>
+                                                <td className="px-6 py-4"><StatusBadge status={process.status} /></td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <button
+                                                        onClick={() => setSelectedProcessId(process.id)}
+                                                        className="text-amber-600 hover:text-amber-700 font-bold"
+                                                    >
+                                                        Gerenciar
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <div className="flex gap-4 overflow-x-auto pb-4">
+                                {['analysis', 'pending', 'approved', 'rejected'].map(status => (
+                                    <div key={status} className="min-w-[280px] bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                        <h4 className="font-bold text-slate-700 mb-4 uppercase text-xs flex justify-between">
+                                            {status === 'analysis' && 'Em Análise'}
+                                            {status === 'pending' && 'Pendência'}
+                                            {status === 'approved' && 'Aprovado'}
+                                            {status === 'rejected' && 'Reprovado'}
+                                            <span className="bg-slate-200 px-2 rounded-full text-slate-600">
+                                                {processes.filter(p => p.status === status).length}
+                                            </span>
+                                        </h4>
+                                        <div className="space-y-3">
+                                            {processes.filter(p => p.status === status).map(process => (
+                                                <div key={process.id} className="bg-white p-3 rounded-lg shadow-sm border border-slate-100 hover:shadow-md transition-shadow cursor-pointer" onClick={() => setSelectedProcessId(process.id)}>
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <span className="font-bold text-sm text-slate-800">{process.client_name}</span>
+                                                    </div>
+                                                    <p className="text-xs text-slate-500 mb-2">{process.type}</p>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-xs font-mono font-medium text-slate-600">R$ {process.value.toLocaleString()}</span>
+                                                        <StatusBadge status={process.status} />
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
                                 ))}
-                            </tbody>
-                        </table>
-                    </div>
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
         );

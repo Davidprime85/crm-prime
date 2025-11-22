@@ -75,133 +75,31 @@ export const ClientDashboard: React.FC = () => {
       </div>
     );
   }
-
-  return (
-    <div className="relative min-h-[80vh]">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column: Process List */}
-        <div className="space-y-6">
-          <h2 className="text-2xl font-bold text-slate-900">Meus Processos</h2>
-          <div className="space-y-4">
-            {processes.map(process => (
-              <div
-                key={process.id}
-                onClick={() => setSelectedProcessId(process.id)}
-                className={`p-5 rounded-xl border cursor-pointer transition-all ${selectedProcessId === process.id
-                    ? 'bg-slate-900 border-slate-900 text-white shadow-lg'
-                    : 'bg-white border-slate-100 hover:border-slate-300 text-slate-900 shadow-sm'
-                  }`}
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <span className={`text-xs font-bold px-2 py-1 rounded uppercase tracking-wide ${selectedProcessId === process.id ? 'bg-slate-700 text-slate-300' : 'bg-slate-100 text-slate-500'}`}>
-                    {process.type}
-                  </span>
-                  {selectedProcessId !== process.id && <StatusBadge status={process.status} />}
-                </div>
-                <h3 className="font-bold text-lg mb-1">Imóvel Residencial</h3>
-                <p className={`text-sm ${selectedProcessId === process.id ? 'text-slate-400' : 'text-slate-500'}`}>
-                  ID: {process.id}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          <div className="bg-amber-50 border border-amber-100 p-5 rounded-xl">
-            <h4 className="font-bold text-amber-900 mb-2">Precisa de ajuda?</h4>
-            <p className="text-sm text-amber-800 mb-4">Utilize o chat ao lado ou nosso WhatsApp.</p>
-          </div>
-        </div>
-
-        {/* Right Column: Details, Timeline & Documents */}
-        {selectedProcess && (
-          <div className="lg:col-span-2 space-y-8">
-            {/* Header Info */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <h2 className="text-xl font-bold text-slate-900 mb-1">Detalhes do Financiamento</h2>
-                  <p className="text-slate-500">Atualizado em {new Date(selectedProcess.updated_at).toLocaleDateString()}</p>
-                </div>
-                <StatusBadge status={selectedProcess.status} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-slate-50 rounded-lg">
-                  <span className="block text-xs text-slate-400 uppercase tracking-wider mb-1">Valor Solicitado</span>
-                  <span className="text-lg font-bold text-slate-900">R$ {selectedProcess.value.toLocaleString()}</span>
-                </div>
-                <div className="p-4 bg-slate-50 rounded-lg">
-                  <span className="block text-xs text-slate-400 uppercase tracking-wider mb-1">Tipo</span>
-                  <span className="text-lg font-bold text-slate-900">{selectedProcess.type}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Documents Section */}
-            <DocumentList
-              processId={selectedProcess.id}
-              documents={selectedProcess.documents || []}
-              userRole="client"
-              onDocumentUpdate={handleDocumentUpdate}
-              onAddDocument={handleAddDocument}
-            />
-
-            {/* Timeline Visual */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-              <h3 className="text-lg font-bold text-slate-900 mb-6">Progresso do Financiamento</h3>
-              <div className="relative pl-4 border-l-2 border-slate-100 space-y-8">
-                {[
-                  { id: 'analysis', title: 'Análise Inicial', desc: 'Seus dados estão sendo analisados.' },
-                  { id: 'pending_docs', title: 'Documentação', desc: 'Envio e verificação de documentos.' },
-                  { id: 'approved', title: 'Aprovação', desc: 'Crédito aprovado pelo banco.' },
-                  { id: 'contract', title: 'Contrato', desc: 'Assinatura do contrato de financiamento.' }
-                ].map((step, idx) => {
-                  // Logic to determine state
-                  const statusOrder = ['analysis', 'pending_docs', 'approved', 'contract'];
-                  const currentIdx = statusOrder.indexOf(selectedProcess.status);
-                  const stepIdx = statusOrder.indexOf(step.id);
-
-                  let state = 'pending';
-                  if (stepIdx < currentIdx) state = 'completed';
-                  else if (stepIdx === currentIdx) state = 'current';
-
-                  // Special case: pending_docs can be skipped or revisited, but for linear timeline:
-                  // If approved, pending_docs is done.
-
-                  return (
-                    <div key={step.id} className="relative pl-6">
-                      <div className={`absolute -left-[21px] top-0 w-10 h-10 flex items-center justify-center rounded-full border-4 border-white transition-colors ${state === 'completed' ? 'bg-green-500 text-white' :
-                          state === 'current' ? 'bg-amber-500 text-white animate-pulse' : 'bg-slate-200 text-slate-400'
-                        }`}>
-                        {state === 'completed' ? <CheckCircle2 size={20} /> :
-                          state === 'current' ? <Loader2 size={20} className="animate-spin" /> :
-                            <Circle size={20} />}
-                      </div>
-                      <div>
-                        <h4 className={`font-bold ${state === 'current' ? 'text-amber-600' : state === 'completed' ? 'text-green-700' : 'text-slate-400'}`}>
-                          {step.title}
-                        </h4>
-                        <p className="text-sm text-slate-500 mt-1">{step.desc}</p>
-                      </div>
-                    </div>
+  <div>
+    <h4 className={`font-bold ${state === 'current' ? 'text-amber-600' : state === 'completed' ? 'text-green-700' : 'text-slate-400'}`}>
+      {step.title}
+    </h4>
+    <p className="text-sm text-slate-500 mt-1">{step.desc}</p>
+  </div>
+                    </div >
                   );
                 })}
-              </div>
-            </div>
-          </div>
+              </div >
+            </div >
+          </div >
         )}
-      </div>
+      </div >
 
-      {/* Fixed Elements - Always Rendered */}
-      <WhatsAppButton />
+  {/* Fixed Elements - Always Rendered */ }
+  < WhatsAppButton />
 
-      {selectedProcess && (
-        <ChatWidget
-          processId={selectedProcess.id}
-          currentUser={currentUser}
-          recipientName="Atendimento Prime"
-        />
-      )}
-    </div>
+  { selectedProcess && (
+    <ChatWidget
+      processId={selectedProcess.id}
+      currentUser={currentUser}
+      recipientName="Atendimento Prime"
+    />
+  )}
+    </div >
   );
 };
