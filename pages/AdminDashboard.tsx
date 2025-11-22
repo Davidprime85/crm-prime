@@ -525,13 +525,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
                 <p className="text-sm text-blue-700 mb-4">
                     Anexe uma foto do documento (RG/CNH) para preencher automaticamente o Nome e CPF.
                 </p>
-                <div className="flex items-center gap-4">
+                <div className="flex flex-wrap items-center gap-4">
                     <label className="cursor-pointer bg-white border border-blue-200 text-blue-700 px-4 py-2 rounded-lg font-medium hover:bg-blue-50 transition-colors flex items-center gap-2">
                         {ocrLoading ? <Loader2 className="animate-spin" size={18} /> : <Upload size={18} />}
-                        {ocrLoading ? 'Lendo imagem...' : 'Carregar Documento'}
+                        {ocrLoading ? 'Lendo imagem...' : 'Carregar Arquivo'}
                         <input type="file" accept="image/*" className="hidden" onChange={handleOCR} disabled={ocrLoading} />
                     </label>
-                    {ocrLoading && <span className="text-xs text-blue-500">Isso pode levar alguns segundos...</span>}
+
+                    <label className="cursor-pointer bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm shadow-blue-200">
+                        {ocrLoading ? <Loader2 className="animate-spin" size={18} /> : <ScanLine size={18} />}
+                        {ocrLoading ? 'Processando...' : 'Tirar Foto'}
+                        <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleOCR} disabled={ocrLoading} />
+                    </label>
+
+                    {ocrLoading && <span className="text-xs text-blue-500 animate-pulse">Isso pode levar alguns segundos...</span>}
                 </div>
             </div>
 
