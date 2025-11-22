@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Process, CustomField, ProcessDocument, KPIMetrics } from '../types';
-import Tesseract from 'tesseract.js';
 import { useLocation } from 'react-router-dom';
 
 type AdminTab = 'dashboard' | 'processes' | 'new_client' | 'settings';
@@ -49,7 +48,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
     const [customFields, setCustomFields] = useState<CustomField[]>([]);
     const [participants, setParticipants] = useState<Participant[]>([]);
     const [creating, setCreating] = useState(false);
-    const [ocrLoading, setOcrLoading] = useState(false);
 
     // Initial Data Load
     useEffect(() => {
@@ -151,112 +149,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
 
     const handleRemoveParticipant = (index: number) => {
         setParticipants(participants.filter((_, i) => i !== index));
-    };
-
-    const handleOCR = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        setOcrLoading(true);
-        try {
-            const result = await Tesseract.recognize(file, 'por', {
-                logger: m => console.log(m)
-            });
-
-            const text = result.data.text;
-            console.log("OCR Result:", text);
-
-            // Simple heuristics
-            const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-            let foundName = '';
-            let foundCPF = '';
-            let foundDob = '';
-            let foundRg = '';
-            let foundOrg = '';
-            let foundMothersName = '';
-            let foundFathersName = '';
-            let foundNaturalness = '';
-            let foundDispatchDate = '';
-
-            // CPF
-            const cpfRegex = /\d{3}\.?\d{3}\.?\d{3}-?\d{2}/;
-            const cpfMatch = text.match(cpfRegex);
-            if (cpfMatch) foundCPF = cpfMatch[0];
-
-            // Dates (DD/MM/YYYY)
-            const dateRegex = /\d{2}\/\d{2}\/\d{4}/g;
-            const dates = text.match(dateRegex);
-            if (dates && dates.length > 0) {
-                // Heuristic: First date usually DOB, second might be dispatch date
-                foundDob = dates[0];
-                if (dates.length > 1) foundDispatchDate = dates[dates.length - 1]; // Last date often dispatch
-            }
-
-            // Name (Uppercase, long, not keywords)
-            // Strategy: Look for the longest uppercase line that isn't a known keyword
-            const ignoreWords = ['REPÚBLICA', 'FEDERATIVA', 'BRASIL', 'IDENTIDADE', 'VALIDA', 'TERRITÓRIO', 'NACIONAL', 'MINISTÉRIO', 'CARTEIRA', 'HABILITAÇÃO', 'FILIAÇÃO', 'NOME', 'DATA', 'NASCIMENTO', 'NATURALIDADE', 'DOC.'];
-
-            const potentialNames = lines.filter(l =>
-                l.length > 10 &&
-                l === l.toUpperCase() &&
-                !/\d/.test(l) && // No numbers
-                !ignoreWords.some(w => l.includes(w))
-            );
-
-            if (potentialNames.length > 0) {
-                foundName = potentialNames[0]; // Best guess for own name
-
-                // If we have more potential names, they might be parents
-                // This is very loose, but better than nothing
-                if (potentialNames.length > 1) foundMothersName = potentialNames[1];
-                if (potentialNames.length > 2) foundFathersName = potentialNames[2];
-            }
-
-            // RG (Simple check for digits, maybe preceded by RG)
-            const rgRegex = /\b\d{1,2}\.?\d{3}\.?\d{3}-?[0-9X]\b/;
-            const rgMatch = text.match(rgRegex);
-            if (rgMatch && rgMatch[0] !== foundCPF) foundRg = rgMatch[0];
-
-            // Orgão Emissor (SSP, DETRAN)
-            if (text.includes('SSP')) foundOrg = 'SSP';
-            else if (text.includes('DETRAN')) foundOrg = 'DETRAN';
-            else if (text.includes('S.S.P')) foundOrg = 'SSP';
-
-            // Naturalness (Look for city/state pattern or keywords)
-            // Hard to detect without a city database, but let's look for lines with "/" that aren't dates
-            const naturalnessLine = lines.find(l => l.includes('/') && !/\d/.test(l) && l.length < 30);
-            if (naturalnessLine) foundNaturalness = naturalnessLine;
-
-            if (foundName || foundCPF) {
-                setNewClient(prev => ({
-                    ...prev,
-                    name: foundName || prev.name,
-                    cpf: foundCPF || prev.cpf
-                }));
-
-                // Add extra fields
-                const newExtras = [...customFields];
-                if (foundDob) newExtras.push({ label: 'Data de Nascimento', value: foundDob });
-                if (foundRg) newExtras.push({ label: 'RG', value: foundRg });
-                if (foundOrg) newExtras.push({ label: 'Órgão Emissor', value: foundOrg });
-                if (foundDispatchDate) newExtras.push({ label: 'Data de Expedição', value: foundDispatchDate });
-                if (foundMothersName) newExtras.push({ label: 'Nome da Mãe', value: foundMothersName });
-                if (foundFathersName) newExtras.push({ label: 'Nome do Pai', value: foundFathersName });
-                if (foundNaturalness) newExtras.push({ label: 'Naturalidade', value: foundNaturalness });
-
-                setCustomFields(newExtras);
-
-                alert('Dados lidos! Verifique Nome, CPF e os Campos Adicionais (Filiação, Naturalidade, etc).');
-            } else {
-                alert('Não foi possível identificar os dados automaticamente. Por favor, preencha manualmente.');
-            }
-
-        } catch (err) {
-            console.error(err);
-            alert('Erro ao processar imagem. Tente uma imagem mais clara.');
-        } finally {
-            setOcrLoading(false);
-        }
     };
 
     const handleCreateClient = async (e: React.FormEvent) => {
@@ -516,31 +408,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
             <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
                 <Plus className="text-amber-500" /> Novo Cadastro
             </h3>
-
-            {/* OCR Section */}
-            <div className="mb-8 p-6 bg-blue-50 rounded-xl border border-blue-100">
-                <h4 className="font-bold text-blue-900 mb-2 flex items-center gap-2">
-                    <ScanLine size={18} /> Preenchimento Automático (OCR)
-                </h4>
-                <p className="text-sm text-blue-700 mb-4">
-                    Anexe uma foto do documento (RG/CNH) para preencher automaticamente o Nome e CPF.
-                </p>
-                <div className="flex flex-wrap items-center gap-4">
-                    <label className="cursor-pointer bg-white border border-blue-200 text-blue-700 px-4 py-2 rounded-lg font-medium hover:bg-blue-50 transition-colors flex items-center gap-2">
-                        {ocrLoading ? <Loader2 className="animate-spin" size={18} /> : <Upload size={18} />}
-                        {ocrLoading ? 'Lendo imagem...' : 'Carregar Arquivo'}
-                        <input type="file" accept="image/*" className="hidden" onChange={handleOCR} disabled={ocrLoading} />
-                    </label>
-
-                    <label className="cursor-pointer bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm shadow-blue-200">
-                        {ocrLoading ? <Loader2 className="animate-spin" size={18} /> : <ScanLine size={18} />}
-                        {ocrLoading ? 'Processando...' : 'Tirar Foto'}
-                        <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleOCR} disabled={ocrLoading} />
-                    </label>
-
-                    {ocrLoading && <span className="text-xs text-blue-500 animate-pulse">Isso pode levar alguns segundos...</span>}
-                </div>
-            </div>
 
             <form onSubmit={handleCreateClient} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
