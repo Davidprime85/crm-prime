@@ -141,6 +141,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
             <LogOut size={16} />
             Sair do Sistema
           </button>
+          <div className="mt-4 text-center">
+            <span className="text-[10px] bg-slate-800 text-slate-500 px-2 py-1 rounded-full">v1.1</span>
+          </div>
         </div>
       </aside>
 
