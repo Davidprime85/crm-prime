@@ -71,6 +71,7 @@ export interface Process {
   documents: ProcessDocument[];
   messages?: ChatMessage[];
   extra_fields?: CustomField[]; // Fields added dynamically by Admin
+  has_unread?: boolean; // New property for chat alerts
 }
 
 export interface KPIMetrics {

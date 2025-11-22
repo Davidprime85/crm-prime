@@ -21,14 +21,24 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ processId, currentUser, 
 
   useEffect(() => {
     if (isOpen) {
+      console.log('Chat aberto. Process ID:', processId);
       scrollToBottom();
+
       // Carregar mensagens iniciais
-      chatService.getMessages(processId).then(setMessages);
+      chatService.getMessages(processId)
+        .then(msgs => {
+          console.log('Mensagens carregadas:', msgs.length);
+          setMessages(msgs);
+        })
+        .catch(err => {
+          console.error('Erro ao carregar mensagens:', err);
+          alert('Erro ao conectar ao chat. Verifique o console.');
+        });
 
       // Inscrever no Realtime
       const subscription = chatService.subscribeToMessages(processId, (newMsg) => {
+        console.log('Nova mensagem recebida:', newMsg);
         setMessages(prev => {
-          // Evita duplicatas se o sender for o próprio usuário (já adicionado otimisticamente ou pelo retorno do insert)
           if (prev.some(m => m.id === newMsg.id)) return prev;
           return [...prev, newMsg];
         });
@@ -120,8 +130,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ processId, currentUser, 
           return (
             <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[80%] p-3 rounded-lg text-sm ${isMe
-                  ? 'bg-amber-500 text-white rounded-tr-none'
-                  : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none'
+                ? 'bg-amber-500 text-white rounded-tr-none'
+                : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none'
                 }`}>
                 {!isMe && <p className="text-[10px] font-bold mb-1 text-slate-400">{msg.sender_name}</p>}
                 <p>{msg.content}</p>

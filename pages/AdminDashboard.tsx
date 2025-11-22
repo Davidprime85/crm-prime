@@ -229,18 +229,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
     // --- Views ---
 
     const renderOverview = () => {
-        // Calculate VGV (Valor Geral de Vendas) - Sum of approved processes
-        const vgv = processes
-            .filter(p => p.status === 'approved')
-            .reduce((sum, p) => sum + p.value, 0);
+        // Calculate Sums
+        const sumAnalysis = processes.filter(p => p.status === 'analysis').reduce((acc, p) => acc + p.value, 0);
+        const sumApproved = processes.filter(p => p.status === 'approved').reduce((acc, p) => acc + p.value, 0);
+        const sumPending = processes.filter(p => p.status === 'pending_docs').reduce((acc, p) => acc + p.value, 0);
 
         return (
             <div className="space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <StatCard title="Total de Processos" value={metrics.total} icon={FileText} color="slate" />
-                    <StatCard title="Em Análise" value={metrics.analysis} icon={AlertCircle} color="blue" />
-                    <StatCard title="Aprovados" value={metrics.approved} icon={CheckCircle} color="green" />
-                    <StatCard title="VGV Aprovado" value={`R$ ${vgv.toLocaleString()}`} icon={Briefcase} color="amber" />
+                    <StatCard
+                        title="Total de Processos"
+                        value={metrics.total}
+                        icon={FileText}
+                        color="slate"
+                    />
+                    <StatCard
+                        title="Em Análise"
+                        value={metrics.analysis}
+                        subValue={`R$ ${sumAnalysis.toLocaleString()}`}
+                        icon={AlertCircle}
+                        color="blue"
+                    />
+                    <StatCard
+                        title="Aprovados"
+                        value={metrics.approved}
+                        subValue={`R$ ${sumApproved.toLocaleString()}`}
+                        icon={CheckCircle}
+                        color="green"
+                    />
+                    <StatCard
+                        title="Pendentes"
+                        value={processes.filter(p => p.status === 'pending_docs').length}
+                        subValue={`R$ ${sumPending.toLocaleString()}`}
+                        icon={Briefcase}
+                        color="amber"
+                    />
                 </div>
 
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
@@ -460,13 +483,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
                                         </h4>
                                         <div className="space-y-3">
                                             {processes.filter(p => p.status === status).map(process => (
-                                                <div key={process.id} className="bg-white p-3 rounded-lg shadow-sm border border-slate-100 hover:shadow-md transition-shadow cursor-pointer" onClick={() => setSelectedProcessId(process.id)}>
+                                                <div key={process.id} className="bg-white p-3 rounded-lg shadow-sm border border-slate-100 hover:shadow-md transition-shadow cursor-pointer relative" onClick={() => setSelectedProcessId(process.id)}>
+                                                    {process.has_unread && (
+                                                        <div className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-sm animate-pulse z-10">
+                                                            Nova Msg
+                                                        </div>
+                                                    )}
                                                     <div className="flex justify-between items-start mb-2">
-                                                        <span className="font-bold text-sm text-slate-800">{process.client_name}</span>
+                                                        <span className="font-bold text-slate-700 text-sm">{process.client_name}</span>
+                                                        <span className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-500 font-mono">
+                                                            R$ {process.value.toLocaleString()}
+                                                        </span>
                                                     </div>
-                                                    <p className="text-xs text-slate-500 mb-2">{process.type}</p>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-xs font-mono font-medium text-slate-600">R$ {process.value.toLocaleString()}</span>
+                                                    <div className="text-xs text-slate-400 flex justify-between">
+                                                        <span>{process.type}</span>
+                                                        <span>{new Date(process.created_at).toLocaleDateString()}</span>
+                                                    </div>
+                                                    <div className="mt-2">
                                                         <StatusBadge status={process.status} />
                                                     </div>
                                                 </div>
