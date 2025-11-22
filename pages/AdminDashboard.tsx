@@ -163,7 +163,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
             // without logging out the admin. For this demo, we simulate success or use a specific endpoint.
             // Assuming authService.register handles this or we just create DB record first.
 
-            const { user, error } = await authService.register(newClient.email, '123456', newClient.name, 'client');
+            const { user, error } = await authService.register(newClient.email, '123456', newClient.name);
 
             if (error) throw error;
 
