@@ -3,7 +3,9 @@ import { StatusBadge } from '../components/StatusBadge';
 import { DocumentList } from '../components/DocumentList';
 import { WhatsAppButton } from '../components/WhatsAppButton';
 import { ChatWidget } from '../components/ChatWidget';
-import { CheckCircle2, Circle, MessageSquare, Loader2 } from 'lucide-react';
+import { FinancingSteps } from '../components/FinancingSteps';
+import { FAQSection } from '../components/FAQSection';
+import { CheckCircle2, Circle, MessageSquare, Loader2, MessageCircle } from 'lucide-react';
 import { Process, ProcessDocument } from '../types';
 import { dataService } from '../services/dataService';
 import { authService } from '../services/authService';
@@ -75,31 +77,88 @@ export const ClientDashboard: React.FC = () => {
       </div>
     );
   }
-  <div>
-    <h4 className={`font-bold ${state === 'current' ? 'text-amber-600' : state === 'completed' ? 'text-green-700' : 'text-slate-400'}`}>
-      {step.title}
-    </h4>
-    <p className="text-sm text-slate-500 mt-1">{step.desc}</p>
-  </div>
-                    </div >
-                  );
-                })}
-              </div >
-            </div >
-          </div >
-        )}
-      </div >
 
-  {/* Fixed Elements - Always Rendered */ }
-  < WhatsAppButton />
+  return (
+    <div className="space-y-8">
+      {/* Welcome Section */}
+      <div className="bg-slate-900 text-white p-8 rounded-2xl shadow-lg relative overflow-hidden">
+        <div className="relative z-10">
+          <h1 className="text-3xl font-bold mb-2">Olá, {currentUser?.name || 'Cliente'}!</h1>
+          <p className="text-slate-300">Acompanhe o progresso do seu sonho da casa própria.</p>
+        </div>
+        <div className="absolute right-0 top-0 h-full w-1/3 bg-gradient-to-l from-amber-500/20 to-transparent"></div>
+      </div>
 
-  { selectedProcess && (
-    <ChatWidget
-      processId={selectedProcess.id}
-      currentUser={currentUser}
-      recipientName="Atendimento Prime"
-    />
-  )}
-    </div >
+      {/* Financing Steps Banner */}
+      <FinancingSteps />
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left Column: Process Details */}
+        <div className="lg:col-span-2 space-y-8">
+          {selectedProcess ? (
+            <>
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                <div className="flex justify-between items-start mb-6">
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900">Processo #{selectedProcess.id}</h2>
+                    <p className="text-slate-500">{selectedProcess.type}</p>
+                  </div>
+                  <StatusBadge status={selectedProcess.status} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="p-4 bg-slate-50 rounded-lg">
+                    <p className="text-xs text-slate-500 uppercase mb-1">Valor do Imóvel</p>
+                    <p className="font-bold text-lg">R$ {selectedProcess.value.toLocaleString()}</p>
+                  </div>
+                  <div className="p-4 bg-slate-50 rounded-lg">
+                    <p className="text-xs text-slate-500 uppercase mb-1">Data de Início</p>
+                    <p className="font-bold text-lg">{new Date(selectedProcess.created_at).toLocaleDateString()}</p>
+                  </div>
+                </div>
+
+                <h3 className="font-bold text-slate-900 mb-4">Seus Documentos</h3>
+                <DocumentList
+                  processId={selectedProcess.id}
+                  documents={selectedProcess.documents}
+                  userRole="client"
+                  onDocumentUpdate={handleDocumentUpdate}
+                  onAddDocument={handleAddDocument}
+                />
+              </div>
+
+              {/* FAQ Section */}
+              <FAQSection />
+            </>
+          ) : (
+            <div className="text-center py-12 bg-white rounded-xl border border-slate-100">
+              <p className="text-slate-500">Selecione um processo para ver os detalhes.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Right Column: Chat & Actions */}
+        <div className="space-y-6">
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+            <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <MessageCircle size={20} className="text-amber-500" /> Fale com seu Consultor
+            </h3>
+            {selectedProcess && (
+              <ChatWidget
+                processId={selectedProcess.id}
+                currentUser={currentUser}
+                recipientName="Consultor Prime"
+              />
+            )}
+          </div>
+
+          <div className="bg-green-50 p-6 rounded-xl border border-green-100">
+            <h3 className="font-bold text-green-900 mb-2">Precisa de ajuda urgente?</h3>
+            <p className="text-sm text-green-700 mb-4">Fale diretamente conosco pelo WhatsApp.</p>
+            <WhatsAppButton />
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };

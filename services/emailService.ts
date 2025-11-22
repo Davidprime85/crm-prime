@@ -2,9 +2,9 @@ import emailjs from 'emailjs-com';
 
 // Configuração do EmailJS
 // Substitua pelos seus IDs reais do painel do EmailJS
-const SERVICE_ID = 'service_ID_AQUI'; // Ex: service_gmail
-const TEMPLATE_ID = 'template_ID_AQUI'; // Ex: template_welcome
-const PUBLIC_KEY = 'public_KEY_AQUI'; // Ex: user_123456
+const SERVICE_ID = 'service_1rz80kw'; // Ex: service_gmail
+const TEMPLATE_ID = 'template_327xuk7'; // Ex: template_welcome
+const PUBLIC_KEY = 'r0O3IDBecU2g66-bu'; // Ex: user_123456
 
 export const emailService = {
     sendWelcomeEmail: async (clientName: string, clientEmail: string, password?: string) => {
