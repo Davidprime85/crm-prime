@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LogOut, User as UserIcon, LayoutDashboard, FileText, Settings, Calculator, Bell } from 'lucide-react';
+import { LogOut, User as UserIcon, LayoutDashboard, FileText, Settings, Calculator, Bell, Menu, X } from 'lucide-react';
 import { User, Notification } from '../types';
 import { notificationService } from '../services/notificationService';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -13,6 +13,7 @@ interface LayoutProps {
 export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -27,6 +28,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
     return () => clearInterval(interval);
   }, [user.id]);
 
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const handleMarkRead = (id: string) => {
@@ -40,16 +46,27 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
+      {/* Mobile Header */}
+      <div className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center sticky top-0 z-50">
+        <div className="font-bold text-amber-500">PRIME</div>
+        <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="text-white">
+          {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+        </button>
+      </div>
+
       {/* Sidebar */}
-      <aside className="w-full md:w-64 bg-slate-900 text-white flex-shrink-0 flex flex-col sticky top-0 h-screen z-40">
-        <div className="p-6 border-b border-slate-800">
+      <aside className={`
+        fixed inset-y-0 left-0 z-40 w-64 bg-slate-900 text-white transform transition-transform duration-300 ease-in-out md:translate-x-0 md:static md:h-screen md:sticky md:top-0 flex flex-col
+        ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
+        <div className="p-6 border-b border-slate-800 flex justify-between items-center">
           {/* Logo Area com Fallback */}
           <div className="flex flex-col items-start gap-2">
             <div className="w-full flex justify-center md:justify-start">
               <img
                 src="/logo-prime-horizontal.png"
                 alt="Prime Correspondente"
-                className="w-64 h-auto object-contain bg-white rounded-lg px-3 py-2 shadow-md"
+                className="w-44 h-auto object-contain bg-white rounded-lg px-3 py-2 shadow-md"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                   const fallback = document.getElementById('logo-fallback-sidebar');
@@ -61,6 +78,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
               </div>
             </div>
           </div>
+          {/* Close button for mobile inside sidebar */}
+          <button onClick={() => setMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-white">
+            <X size={20} />
+          </button>
         </div>
 
         <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
@@ -122,6 +143,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
           </button>
         </div>
       </aside>
+
+      {/* Overlay for mobile */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
 
       {/* Header & Main Content */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden">

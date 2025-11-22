@@ -7,15 +7,23 @@ import { notificationService } from '../services/notificationService';
 import { dataService } from '../services/dataService';
 import {
     BarChart as BarChartIcon, Users, FileText, AlertCircle, CheckCircle, Search, Filter,
-    Plus, Printer, ArrowLeft, Save, Trash2, Briefcase, Settings as SettingsIcon, UserPlus, Loader2
+    Plus, Printer, ArrowLeft, Save, Trash2, Briefcase, Settings as SettingsIcon, UserPlus, Loader2, Upload, ScanLine
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Process, CustomField, ProcessDocument, KPIMetrics } from '../types';
+import Tesseract from 'tesseract.js';
 
 type AdminTab = 'dashboard' | 'processes' | 'new_client' | 'settings';
 
 interface AdminDashboardProps {
     initialTab?: AdminTab;
+}
+
+interface Participant {
+    name: string;
+    cpf: string;
+    income: string;
+    role: 'Conjuge' | 'Composicao' | 'Outro';
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'dashboard' }) => {
@@ -37,7 +45,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
         type: 'Minha Casa Minha Vida'
     });
     const [customFields, setCustomFields] = useState<CustomField[]>([]);
+    const [participants, setParticipants] = useState<Participant[]>([]);
     const [creating, setCreating] = useState(false);
+    const [ocrLoading, setOcrLoading] = useState(false);
 
     // Initial Data Load
     useEffect(() => {
@@ -49,7 +59,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
         if (tab && ['dashboard', 'processes', 'new_client', 'settings'].includes(tab)) {
             setActiveTab(tab as AdminTab);
         }
-    }, []);
+    }, [window.location.search]);
 
     const loadData = async () => {
         setLoading(true);
@@ -127,10 +137,78 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
         setCustomFields(customFields.filter((_, i) => i !== index));
     };
 
+    const handleAddParticipant = () => {
+        setParticipants([...participants, { name: '', cpf: '', income: '', role: 'Conjuge' }]);
+    };
+
+    const handleParticipantChange = (index: number, field: keyof Participant, value: string) => {
+        const newParts = [...participants];
+        newParts[index] = { ...newParts[index], [field]: value };
+        setParticipants(newParts);
+    };
+
+    const handleRemoveParticipant = (index: number) => {
+        setParticipants(participants.filter((_, i) => i !== index));
+    };
+
+    const handleOCR = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setOcrLoading(true);
+        try {
+            const result = await Tesseract.recognize(file, 'por', {
+                logger: m => console.log(m)
+            });
+
+            const text = result.data.text;
+            console.log("OCR Result:", text);
+
+            // Simple heuristics to find Name and CPF (Very basic)
+            // In a real app, use Regex or specific document parsers
+            const lines = text.split('\n');
+            let foundName = '';
+            let foundCPF = '';
+
+            // Try to find CPF format
+            const cpfRegex = /\d{3}\.?\d{3}\.?\d{3}-?\d{2}/;
+            const cpfMatch = text.match(cpfRegex);
+            if (cpfMatch) foundCPF = cpfMatch[0];
+
+            // Try to find name (Assuming it's often in uppercase and long)
+            // This is just a guess, user will verify
+            const possibleName = lines.find(l => l.length > 10 && l === l.toUpperCase() && !l.includes('REPÚBLICA') && !l.includes('IDENTIDADE'));
+            if (possibleName) foundName = possibleName;
+
+            if (foundName || foundCPF) {
+                setNewClient(prev => ({
+                    ...prev,
+                    name: foundName || prev.name,
+                    cpf: foundCPF || prev.cpf
+                }));
+                alert('Dados lidos do documento! Por favor, verifique e complete as informações.');
+            } else {
+                alert('Não foi possível identificar os dados automaticamente. Por favor, preencha manualmente.');
+            }
+
+        } catch (err) {
+            console.error(err);
+            alert('Erro ao processar imagem. Tente uma imagem mais clara.');
+        } finally {
+            setOcrLoading(false);
+        }
+    };
+
     const handleCreateClient = async (e: React.FormEvent) => {
         e.preventDefault();
         setCreating(true);
-        const newId = `PROC-${Math.floor(Math.random() * 10000)}`; // In real app, DB generates ID, but here we manually assign for Process ID
+        const newId = `PROC-${Math.floor(Math.random() * 10000)}`;
+
+        // Add participants to extra fields for now, or a specific JSON field if DB supported
+        const participantFields = participants.map((p, i) => ({
+            label: `Participante ${i + 1} (${p.role})`,
+            value: `${p.name} - CPF: ${p.cpf} - Renda: ${p.income}`
+        }));
 
         const newProcess: Partial<Process> = {
             id: newId,
@@ -144,7 +222,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
                 { id: 'temp2', name: 'Comprovante de Renda', status: 'pending' },
                 { id: 'temp3', name: 'Comprovante de Residência', status: 'pending' }
             ],
-            extra_fields: customFields
+            extra_fields: [...customFields, ...participantFields]
         };
 
         const result = await dataService.createProcess(newProcess);
@@ -153,6 +231,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
             alert(`Cliente ${newClient.name} pré-cadastrado com sucesso!\n\nPeça para o cliente criar uma conta no site com o e-mail: ${newClient.email} para acessar o processo.`);
             setNewClient({ name: '', cpf: '', email: '', phone: '', value: '', type: 'Minha Casa Minha Vida' });
             setCustomFields([]);
+            setParticipants([]);
             setActiveTab('processes');
             loadData();
         } else {
@@ -377,6 +456,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
             <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
                 <Plus className="text-amber-500" /> Novo Cadastro
             </h3>
+
+            {/* OCR Section */}
+            <div className="mb-8 p-6 bg-blue-50 rounded-xl border border-blue-100">
+                <h4 className="font-bold text-blue-900 mb-2 flex items-center gap-2">
+                    <ScanLine size={18} /> Preenchimento Automático (OCR)
+                </h4>
+                <p className="text-sm text-blue-700 mb-4">
+                    Anexe uma foto do documento (RG/CNH) para preencher automaticamente o Nome e CPF.
+                </p>
+                <div className="flex items-center gap-4">
+                    <label className="cursor-pointer bg-white border border-blue-200 text-blue-700 px-4 py-2 rounded-lg font-medium hover:bg-blue-50 transition-colors flex items-center gap-2">
+                        {ocrLoading ? <Loader2 className="animate-spin" size={18} /> : <Upload size={18} />}
+                        {ocrLoading ? 'Lendo imagem...' : 'Carregar Documento'}
+                        <input type="file" accept="image/*" className="hidden" onChange={handleOCR} disabled={ocrLoading} />
+                    </label>
+                    {ocrLoading && <span className="text-xs text-blue-500">Isso pode levar alguns segundos...</span>}
+                </div>
+            </div>
+
             <form onSubmit={handleCreateClient} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -409,6 +507,60 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
                         <option>SBPE</option>
                         <option>Pró-Cotista</option>
                     </select>
+                </div>
+
+                {/* Participants Section */}
+                <div className="border-t border-slate-100 pt-4">
+                    <div className="flex justify-between items-center mb-4">
+                        <label className="text-sm font-bold text-slate-700">Participantes / Composição de Renda</label>
+                        <button type="button" onClick={handleAddParticipant} className="text-xs flex items-center gap-1 text-amber-600 font-bold hover:text-amber-700">
+                            <Plus size={14} /> Adicionar Pessoa
+                        </button>
+                    </div>
+
+                    {participants.length === 0 && <p className="text-xs text-slate-400 italic mb-4">Nenhum participante adicional.</p>}
+
+                    <div className="space-y-3 mb-6">
+                        {participants.map((part, index) => (
+                            <div key={index} className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                <div className="flex justify-between mb-2">
+                                    <span className="text-xs font-bold text-slate-500">Participante {index + 1}</span>
+                                    <button type="button" onClick={() => handleRemoveParticipant(index)} className="text-red-400 hover:text-red-600">
+                                        <Trash2 size={14} />
+                                    </button>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <input
+                                        type="text" placeholder="Nome"
+                                        className="text-xs p-2 border rounded"
+                                        value={part.name}
+                                        onChange={e => handleParticipantChange(index, 'name', e.target.value)}
+                                    />
+                                    <input
+                                        type="text" placeholder="CPF"
+                                        className="text-xs p-2 border rounded"
+                                        value={part.cpf}
+                                        onChange={e => handleParticipantChange(index, 'cpf', e.target.value)}
+                                    />
+                                    <input
+                                        type="text" placeholder="Renda Mensal"
+                                        className="text-xs p-2 border rounded"
+                                        value={part.income}
+                                        onChange={e => handleParticipantChange(index, 'income', e.target.value)}
+                                    />
+                                    <select
+                                        className="text-xs p-2 border rounded bg-white"
+                                        value={part.role}
+                                        onChange={e => handleParticipantChange(index, 'role', e.target.value as any)}
+                                    >
+                                        <option value="Conjuge">Cônjuge</option>
+                                        <option value="Composicao">Composição de Renda</option>
+                                        <option value="Outro">Outro</option>
+                                    </select>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
                 {/* Dynamic Fields Section */}
