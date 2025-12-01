@@ -46,5 +46,15 @@ export const notificationService = {
         type,
         read: false
       });
+  },
+
+  // Gerar link do WhatsApp
+  generateWhatsAppLink: (phone: string, message: string) => {
+    // Remove non-digits
+    const cleanPhone = phone.replace(/\D/g, '');
+    // Add country code if missing (assuming BR +55)
+    const fullPhone = cleanPhone.length <= 11 ? `55${cleanPhone}` : cleanPhone;
+    const encodedMessage = encodeURIComponent(message);
+    return `https://wa.me/${fullPhone}?text=${encodedMessage}`;
   }
 };

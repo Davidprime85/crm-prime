@@ -45,7 +45,16 @@ export const dataService = {
       created_at: p.created_at,
       updated_at: p.updated_at,
       extra_fields: p.extra_fields || [],
-      timeline: [], // Timeline ainda não implementada no banco
+      timeline: (() => {
+        const fields = p.extra_fields || [];
+        const timelineField = fields.find((f: any) => f.label === 'timeline_data');
+        if (timelineField) {
+          try {
+            return JSON.parse(timelineField.value);
+          } catch (e) { return []; }
+        }
+        return [];
+      })(),
       documents: p.process_documents ? p.process_documents.map((d: any) => ({
         id: d.id,
         name: d.name,
@@ -100,20 +109,65 @@ export const dataService = {
   },
 
   async updateProcessStatus(processId: string, status: string) {
-    await supabase.from('processes').update({ status, updated_at: new Date() }).eq('id', processId);
+    // 1. Get current process to update timeline
+    const { data: currentProc } = await supabase
+      .from('processes')
+      .select('extra_fields, client_id')
+      .eq('id', processId)
+      .single();
+
+    let newTimeline = [];
+    if (currentProc && currentProc.extra_fields) {
+      // Check if extra_fields is array (old format) or object (new format potentially)
+      // Assuming extra_fields is JSON array of CustomField based on types.ts
+      // We will store timeline in a special field inside extra_fields or just append to it?
+      // Actually, let's store timeline in a specific JSON structure if possible.
+      // But extra_fields is defined as CustomField[] in types.ts.
+      // Let's cheat a bit and store it as a CustomField with label 'timeline_data' and value as JSON string.
+
+      const fields = currentProc.extra_fields as any[];
+      const timelineField = fields.find((f: any) => f.label === 'timeline_data');
+      if (timelineField) {
+        try {
+          newTimeline = JSON.parse(timelineField.value);
+        } catch (e) { newTimeline = []; }
+      }
+    }
+
+    const statusMap: Record<string, string> = {
+      'analysis': 'Em Análise',
+      'pending_docs': 'Pendência de Documentos',
+      'approved': 'Aprovado',
+      'rejected': 'Reprovado',
+      'contract': 'Contrato'
+    };
+
+    const newEvent = {
+      id: crypto.randomUUID(),
+      title: `Mudança para ${statusMap[status] || status}`,
+      date: new Date().toISOString(),
+      completed: true
+    };
+
+    newTimeline.push(newEvent);
+
+    // Prepare extra_fields update
+    let updatedFields = currentProc?.extra_fields || [];
+    // Remove old timeline field if exists
+    updatedFields = updatedFields.filter((f: any) => f.label !== 'timeline_data');
+    // Add new
+    updatedFields.push({ label: 'timeline_data', value: JSON.stringify(newTimeline) });
+
+    await supabase.from('processes').update({
+      status,
+      updated_at: new Date(),
+      extra_fields: updatedFields
+    }).eq('id', processId);
 
     // Notify Client
-    const { data: process } = await supabase.from('processes').select('client_id').eq('id', processId).single();
-    if (process && process.client_id) {
-      const statusMap: Record<string, string> = {
-        'analysis': 'Em Análise',
-        'pending_docs': 'Pendência de Documentos',
-        'approved': 'Aprovado',
-        'rejected': 'Reprovado',
-        'contract': 'Contrato'
-      };
+    if (currentProc && currentProc.client_id) {
       await notificationService.createNotification(
-        process.client_id,
+        currentProc.client_id,
         'Atualização de Status',
         `Seu processo mudou para: ${statusMap[status] || status}`,
         status === 'rejected' ? 'error' : status === 'approved' ? 'success' : 'info'
