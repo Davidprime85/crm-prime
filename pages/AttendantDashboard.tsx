@@ -405,6 +405,107 @@ export const AttendantDashboard: React.FC = () => {
           onSend={handleNotificationSend}
         />
       )}
+
+      {/* New Client Modal */}
+      {isNewClientModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-amber-500 to-amber-600 p-6 flex items-center justify-between sticky top-0">
+              <h3 className="text-xl font-bold text-white">Novo Cliente</h3>
+              <button
+                onClick={() => setIsNewClientModalOpen(false)}
+                className="text-white/80 hover:text-white transition-colors p-1 hover:bg-white/20 rounded-full"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateClient} className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Nome Completo *</label>
+                  <input
+                    required
+                    type="text"
+                    className="w-full p-2 border rounded-lg"
+                    value={newClient.name}
+                    onChange={e => setNewClient({ ...newClient, name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">CPF *</label>
+                  <input
+                    required
+                    type="text"
+                    className="w-full p-2 border rounded-lg"
+                    value={newClient.cpf}
+                    onChange={e => setNewClient({ ...newClient, cpf: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Email *</label>
+                  <input
+                    required
+                    type="email"
+                    className="w-full p-2 border rounded-lg"
+                    value={newClient.email}
+                    onChange={e => setNewClient({ ...newClient, email: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Telefone (WhatsApp) *</label>
+                  <input
+                    required
+                    type="tel"
+                    className="w-full p-2 border rounded-lg"
+                    value={newClient.phone}
+                    onChange={e => setNewClient({ ...newClient, phone: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Valor do Imóvel (R$) *</label>
+                  <input
+                    required
+                    type="number"
+                    className="w-full p-2 border rounded-lg"
+                    value={newClient.value}
+                    onChange={e => setNewClient({ ...newClient, value: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Tipo de Financiamento *</label>
+                  <select
+                    className="w-full p-2 border rounded-lg"
+                    value={newClient.type}
+                    onChange={e => setNewClient({ ...newClient, type: e.target.value })}
+                  >
+                    <option>Minha Casa Minha Vida</option>
+                    <option>SBPE</option>
+                    <option>Pró-Cotista</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => setIsNewClientModalOpen(false)}
+                  className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 rounded-lg font-semibold hover:bg-slate-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-lg font-bold hover:from-amber-600 hover:to-amber-700 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  {creating ? 'Cadastrando...' : 'Cadastrar Cliente'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
