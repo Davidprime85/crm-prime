@@ -323,14 +323,14 @@ export const AttendantDashboard: React.FC = () => {
           Todos
         </button>
         <button
-          onClick={() => setFilterStatus('analysis')}
-          className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${filterStatus === 'analysis' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:border-blue-200'}`}
+          onClick={() => setFilterStatus('credit_analysis')}
+          className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${filterStatus === 'credit_analysis' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:border-blue-200'}`}
         >
           Em Análise
         </button>
         <button
-          onClick={() => setFilterStatus('pending_docs')}
-          className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${filterStatus === 'pending_docs' ? 'bg-amber-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:border-amber-200'}`}
+          onClick={() => setFilterStatus('legal_analysis')}
+          className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${filterStatus === 'legal_analysis' ? 'bg-amber-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:border-amber-200'}`}
         >
           Pendências
         </button>

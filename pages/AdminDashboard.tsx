@@ -13,7 +13,7 @@ import { authService } from '../services/authService';
 import { emailService } from '../services/emailService';
 import {
     BarChart as BarChartIcon, Users, FileText, AlertCircle, CheckCircle, Search, Filter,
-    Plus, Printer, ArrowLeft, Save, Trash2, Briefcase, Settings as SettingsIcon, UserPlus, Loader2, Upload, ScanLine
+    Plus, Printer, ArrowLeft, Save, Trash2, Briefcase, Settings as SettingsIcon, UserPlus, Loader2, Upload, ScanLine, Activity
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Process, CustomField, ProcessDocument, KPIMetrics, ProcessStatus } from '../types';
@@ -128,7 +128,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
         setProcesses(updatedProcesses);
 
         try {
-            await dataService.updateDocumentStatus(selectedProcessId, docId, newStatus, feedback);
+            await dataService.updateDocument(docId, { status: newStatus, feedback });
             if (url) {
                 // In a real app, we would upload the file here or just save the URL
             }
@@ -137,8 +137,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
             const currentProc = updatedProcesses.find(p => p.id === selectedProcessId);
             if (currentProc) {
                 const allApproved = currentProc.documents.every(d => d.status === 'approved');
-                if (allApproved && currentProc.status === 'analysis') {
-                    await dataService.updateProcessStatus(selectedProcessId, 'approved');
+                // Auto-approve process if all documents are approved
+                if (allApproved && currentProc.status === 'credit_analysis') {
+                    await dataService.updateProcessStatus(selectedProcessId, 'valuation');
                     loadData(); // Refresh to show new status
                 }
             }
@@ -277,7 +278,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
                     <StatCard
                         title="Processos Ativos"
                         value={activeProcesses.toString()}
-                        icon={<ActivityIcon className="text-purple-500" />}
+                        icon={<Activity className="text-purple-500" />}
                         trend="Em andamento"
                     />
                     <StatCard
@@ -753,24 +754,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
                 </div>
             </div>
         </div >
-    );
-
-    // Helper icon component for overview
-    const ActivityIcon = (props: any) => (
-        <svg
-            {...props}
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-        >
-            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-        </svg>
     );
 
     return (
