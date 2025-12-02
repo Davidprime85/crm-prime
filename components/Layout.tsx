@@ -66,7 +66,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
               <img
                 src="/logo-prime-horizontal.png"
                 alt="Prime Correspondente"
-                className="w-40 h-auto object-contain bg-white rounded-lg px-3 py-2 shadow-md"
+                className="w-28 h-auto object-contain bg-white rounded-lg px-3 py-2 shadow-md"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                   const fallback = document.getElementById('logo-fallback-sidebar');
@@ -231,7 +231,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
                 navigate('/processes');
               }
             }}
-            className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-blue-600 to-purple-600 text-white rounded-full shadow-2xl hover:shadow-blue-500/50 hover:scale-110 transition-all duration-300 flex items-center justify-center z-50 group"
+            className="fixed bottom-24 right-6 w-14 h-14 bg-gradient-to-br from-blue-600 to-purple-600 text-white rounded-full shadow-2xl hover:shadow-blue-500/50 hover:scale-110 transition-all duration-300 flex items-center justify-center z-50 group"
             title="Chat"
           >
             <MessageCircle size={24} className="group-hover:scale-110 transition-transform" />

@@ -11,9 +11,7 @@ import { notificationService } from '../services/notificationService';
 import { dataService } from '../services/dataService';
 import { authService } from '../services/authService';
 import { emailService } from '../services/emailService';
-import {
-    BarChart as BarChartIcon, Users, FileText, AlertCircle, CheckCircle, Search, Filter,
-    Plus, Printer, ArrowLeft, Save, Trash2, Briefcase, Settings as SettingsIcon, UserPlus, Loader2, Upload, ScanLine, Activity
+Plus, Printer, ArrowLeft, Save, Trash2, Briefcase, Settings as SettingsIcon, UserPlus, Loader2, Upload, ScanLine, Activity, LayoutGrid, List
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Process, CustomField, ProcessDocument, KPIMetrics, ProcessStatus } from '../types';
@@ -50,6 +48,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
 
     const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null);
     const [filterStatus, setFilterStatus] = useState<string>('all');
+    const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
 
     // New Client Form State
     const [newClient, setNewClient] = useState({
@@ -437,6 +436,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
                         <button className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50">
                             <Filter size={20} /> Filtros
                         </button>
+                        <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+                            <button
+                                onClick={() => setViewMode('kanban')}
+                                className={`p-2 rounded-md transition-all ${viewMode === 'kanban' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
+                                title="Visualização em Grade (Kanban)"
+                            >
+                                <LayoutGrid size={20} />
+                            </button>
+                            <button
+                                onClick={() => setViewMode('list')}
+                                className={`p-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
+                                title="Visualização em Lista"
+                            >
+                                <List size={20} />
+                            </button>
+                        </div>
                     </div>
                 </div>
 
