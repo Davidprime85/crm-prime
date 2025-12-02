@@ -8,8 +8,9 @@ import { NotificationSelector } from '../components/NotificationSelector';
 import { notificationService } from '../services/notificationService';
 import { dataService } from '../services/dataService';
 import { authService } from '../services/authService';
+import { emailService } from '../services/emailService';
 import {
-  Search, Filter, Loader2, LayoutGrid, List
+  Search, Filter, Loader2, LayoutGrid, List, Plus, X
 } from 'lucide-react';
 import { Process, ProcessStatus } from '../types';
 
@@ -20,6 +21,18 @@ export const AttendantDashboard: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [searchTerm, setSearchTerm] = useState('');
+
+  // New Client Modal State
+  const [isNewClientModalOpen, setIsNewClientModalOpen] = useState(false);
+  const [newClient, setNewClient] = useState({
+    name: '',
+    cpf: '',
+    email: '',
+    phone: '',
+    value: '',
+    type: 'Minha Casa Minha Vida'
+  });
+  const [creating, setCreating] = useState(false);
 
   // Stage Input Modal State
   const [stageModal, setStageModal] = useState<{
@@ -73,6 +86,46 @@ export const AttendantDashboard: React.FC = () => {
       await dataService.updateDocument(docId, { status: newStatus, url, feedback });
     } catch (e) {
       alert('Erro ao salvar alteração.');
+    }
+  };
+
+  const handleCreateClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreating(true);
+
+    try {
+      const { user, error } = await authService.register(newClient.email, '123456', newClient.name);
+
+      if (error) throw error;
+
+      if (user) {
+        const processData: Partial<Process> = {
+          client_name: newClient.name,
+          client_id: user.id,
+          client_email: newClient.email,
+          client_cpf: newClient.cpf,
+          type: newClient.type,
+          value: parseFloat(newClient.value) || 0,
+          status: 'credit_analysis',
+          extra_fields: [
+            { label: 'Telefone', value: newClient.phone }
+          ]
+        };
+
+        await dataService.createProcess(processData);
+        await emailService.sendWelcomeEmail(newClient.email, newClient.name);
+
+        alert('Cliente cadastrado com sucesso!');
+        setIsNewClientModalOpen(false);
+        loadData();
+
+        setNewClient({ name: '', cpf: '', email: '', phone: '', value: '', type: 'Minha Casa Minha Vida' });
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert('Erro ao cadastrar cliente: ' + (err.message || 'Erro desconhecido'));
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -239,6 +292,12 @@ export const AttendantDashboard: React.FC = () => {
           </div>
           <button className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50">
             <Filter size={20} /> Filtros
+          </button>
+          <button
+            onClick={() => setIsNewClientModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-bold transition-colors shadow-lg"
+          >
+            <Plus size={20} /> Novo Cliente
           </button>
           <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
             <button
