@@ -255,6 +255,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
         }
     };
 
+    // Handle stage transition with collected data
+    const handleStageTransition = async (data: Record<string, string>) => {
+        const { processId, targetStage } = stageModal;
+
+        try {
+            // Optimistic update
+            const updated = processes.map(p =>
+                p.id === processId ? { ...p, status: targetStage } : p
+            );
+            setProcesses(updated);
+
+            // Save stage-specific data to extra_fields
+            const process = processes.find(p => p.id === processId);
+            if (process) {
+                // Filter out empty values
+                const validData = Object.entries(data).filter(([_, v]) => v !== '');
+
+                const newExtraFields = [
+                    ...(process.extra_fields || []),
+                    ...validData.map(([label, value]) => ({ label, value }))
+                ];
+
+                // Update process with new status and data
+                await dataService.updateProcessStatus(processId, targetStage, data);
+            }
+
+            // Close modal
+            setStageModal({ isOpen: false, processId: '', targetStage: 'credit_analysis' });
+
+            // Reload to get updated data
+            loadData();
+
+            // Auto-open notification modal after successful transition
+            const updatedProcess = processes.find(p => p.id === processId);
+            if (updatedProcess) {
+                setNotificationModal({ isOpen: true, process: { ...updatedProcess, status: targetStage } });
+            }
+        } catch (e) {
+            alert('Erro ao mover processo.');
+            loadData(); // Revert
+        }
+    };
+
+    // Handle notification sending
+    const handleNotificationSend = async (channel: 'email' | 'sms' | 'chat', message: string) => {
+        if (!notificationModal.process) return;
+
+        try {
+            // TODO: Implement actual email/SMS sending via backend
+            console.log(`Sending ${channel} notification:`, message);
+
+            // For now, just show success message
+            alert(`Notificação enviada via ${channel.toUpperCase()}!`);
+
+            // Close modal
+            setNotificationModal({ isOpen: false, process: null });
+        } catch (e) {
+            alert('Erro ao enviar notificação.');
+        }
+    };
+
     // --- Render Functions ---
 
     const renderOverview = () => {
@@ -541,357 +602,288 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
                         )}
                     </div>
                 )}
-                isOpen: true,
-                processId: id,
-                targetStage: status
-                                });
-                            }}
-                onProcessSelect={setSelectedProcessId}
-                        />
-            </>
-        )
-    }
-            </div >
+            </div>
         );
     };
 
-// Handle stage transition with collected data
-const handleStageTransition = async (data: Record<string, string>) => {
-    const { processId, targetStage } = stageModal;
 
-    try {
-        // Optimistic update
-        const updated = processes.map(p =>
-            p.id === processId ? { ...p, status: targetStage } : p
-        );
-        setProcesses(updated);
 
-        // Save stage-specific data to extra_fields
-        const process = processes.find(p => p.id === processId);
-        if (process) {
-            // Filter out empty values
-            const validData = Object.entries(data).filter(([_, v]) => v !== '');
+    const renderNewClient = () => (
+        <div className="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-sm border border-slate-100">
+            <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+                <Plus className="text-amber-500" /> Novo Cadastro
+            </h3>
 
-            const newExtraFields = [
-                ...(process.extra_fields || []),
-                ...validData.map(([label, value]) => ({ label, value }))
-            ];
-
-            // Update process with new status and data
-            await dataService.updateProcessStatus(processId, targetStage, data);
-        }
-
-        // Close modal
-        setStageModal({ isOpen: false, processId: '', targetStage: 'credit_analysis' });
-
-        // Reload to get updated data
-        loadData();
-
-        // Auto-open notification modal after successful transition
-        const updatedProcess = processes.find(p => p.id === processId);
-        if (updatedProcess) {
-            setNotificationModal({ isOpen: true, process: { ...updatedProcess, status: targetStage } });
-        }
-    } catch (e) {
-        alert('Erro ao mover processo.');
-        loadData(); // Revert
-    }
-};
-
-// Handle notification sending
-const handleNotificationSend = async (channel: 'email' | 'sms' | 'chat', message: string) => {
-    if (!notificationModal.process) return;
-
-    try {
-        // TODO: Implement actual email/SMS sending via backend
-        console.log(`Sending ${channel} notification:`, message);
-
-        // For now, just show success message
-        alert(`Notificação enviada via ${channel.toUpperCase()}!`);
-
-        // Close modal
-        setNotificationModal({ isOpen: false, process: null });
-    } catch (e) {
-        alert('Erro ao enviar notificação.');
-    }
-};
-
-const renderNewClient = () => (
-    <div className="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-sm border border-slate-100">
-        <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
-            <Plus className="text-amber-500" /> Novo Cadastro
-        </h3>
-
-        <form onSubmit={handleCreateClient} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Nome Completo</label>
-                    <input
-                        required
-                        type="text"
-                        className="w-full p-2 border rounded-lg"
-                        value={newClient.name}
-                        onChange={e => setNewClient({ ...newClient, name: e.target.value })}
-                    />
+            <form onSubmit={handleCreateClient} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-1">Nome Completo</label>
+                        <input
+                            required
+                            type="text"
+                            className="w-full p-2 border rounded-lg"
+                            value={newClient.name}
+                            onChange={e => setNewClient({ ...newClient, name: e.target.value })}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-1">CPF</label>
+                        <input
+                            required
+                            type="text"
+                            className="w-full p-2 border rounded-lg"
+                            value={newClient.cpf}
+                            onChange={e => setNewClient({ ...newClient, cpf: e.target.value })}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-1">Email</label>
+                        <input
+                            required
+                            type="email"
+                            className="w-full p-2 border rounded-lg"
+                            value={newClient.email}
+                            onChange={e => setNewClient({ ...newClient, email: e.target.value })}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-1">Telefone (WhatsApp)</label>
+                        <input
+                            required
+                            type="tel"
+                            className="w-full p-2 border rounded-lg"
+                            value={newClient.phone}
+                            onChange={e => setNewClient({ ...newClient, phone: e.target.value })}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-1">Valor do Imóvel (R$)</label>
+                        <input
+                            required
+                            type="number"
+                            className="w-full p-2 border rounded-lg"
+                            value={newClient.value}
+                            onChange={e => setNewClient({ ...newClient, value: e.target.value })}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-1">Tipo de Financiamento</label>
+                        <select
+                            className="w-full p-2 border rounded-lg"
+                            value={newClient.type}
+                            onChange={e => setNewClient({ ...newClient, type: e.target.value })}
+                        >
+                            <option>Minha Casa Minha Vida</option>
+                            <option>SBPE</option>
+                            <option>Pró-Cotista</option>
+                        </select>
+                    </div>
                 </div>
-                <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">CPF</label>
-                    <input
-                        required
-                        type="text"
-                        className="w-full p-2 border rounded-lg"
-                        value={newClient.cpf}
-                        onChange={e => setNewClient({ ...newClient, cpf: e.target.value })}
-                    />
+
+                {/* Participants Section */}
+                <div className="border-t pt-4">
+                    <div className="flex justify-between items-center mb-4">
+                        <h4 className="font-bold text-slate-700">Participantes / Cônjuge</h4>
+                        <button type="button" onClick={handleAddParticipant} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+                            <Plus size={16} /> Adicionar
+                        </button>
+                    </div>
+                    <div className="space-y-3">
+                        {participants.map((part, index) => (
+                            <div key={index} className="flex gap-2 items-start bg-slate-50 p-3 rounded-lg">
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-2 flex-1">
+                                    <input
+                                        type="text" placeholder="Nome"
+                                        className="text-xs p-2 border rounded"
+                                        value={part.name}
+                                        onChange={e => handleParticipantChange(index, 'name', e.target.value)}
+                                    />
+                                    <input
+                                        type="text" placeholder="CPF"
+                                        className="text-xs p-2 border rounded"
+                                        value={part.cpf}
+                                        onChange={e => handleParticipantChange(index, 'cpf', e.target.value)}
+                                    />
+                                    <input
+                                        type="text" placeholder="Renda Mensal"
+                                        className="text-xs p-2 border rounded"
+                                        value={part.income}
+                                        onChange={e => handleParticipantChange(index, 'income', e.target.value)}
+                                    />
+                                    <select
+                                        className="text-xs p-2 border rounded"
+                                        value={part.role}
+                                        onChange={e => handleParticipantChange(index, 'role', e.target.value as any)}
+                                    >
+                                        <option>Conjuge</option>
+                                        <option>Composicao</option>
+                                        <option>Outro</option>
+                                    </select>
+                                </div>
+                                <button type="button" onClick={() => handleRemoveParticipant(index)} className="text-red-400 hover:text-red-600 p-1">
+                                    <Trash2 size={16} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
                 </div>
-                <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Email</label>
+
+                {/* Custom Fields Section */}
+                <div className="border-t pt-4">
+                    <div className="flex justify-between items-center mb-4">
+                        <h4 className="font-bold text-slate-700">Campos Personalizados</h4>
+                        <button type="button" onClick={handleAddField} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+                            <Plus size={16} /> Adicionar Campo
+                        </button>
+                    </div>
+                    <div className="space-y-2">
+                        {customFields.map((field, index) => (
+                            <div key={index} className="flex gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="Nome do Campo (ex: Data de Nascimento)"
+                                    className="flex-1 p-2 border rounded-lg text-sm"
+                                    value={field.label}
+                                    onChange={e => handleFieldChange(index, 'label', e.target.value)}
+                                />
+                                <input
+                                    type="text"
+                                    placeholder="Valor"
+                                    className="flex-1 p-2 border rounded-lg text-sm"
+                                    value={field.value}
+                                    onChange={e => handleFieldChange(index, 'value', e.target.value)}
+                                />
+                                <button type="button" onClick={() => handleRemoveField(index)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg">
+                                    <Trash2 size={18} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="pt-4 border-t flex justify-end">
+                    <button
+                        type="submit"
+                        disabled={creating}
+                        className="bg-slate-900 text-white px-8 py-3 rounded-xl font-bold hover:bg-slate-800 disabled:opacity-50 flex items-center gap-2"
+                    >
+                        {creating ? <Loader2 className="animate-spin" /> : <Save size={20} />}
+                        Cadastrar Cliente
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+
+    const renderSettings = () => (
+        <div className="max-w-2xl mx-auto">
+            <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100 mb-8">
+                <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+                    <UserPlus className="text-amber-500" /> Cadastro de Atendente
+                </h3>
+                <p className="text-sm text-slate-500 mb-4">Adicione o e-mail do atendente abaixo. Quando ele criar uma conta no site, receberá automaticamente o acesso de atendente.</p>
+
+                <form onSubmit={handleInviteAttendant} className="flex gap-2">
                     <input
                         required
                         type="email"
-                        className="w-full p-2 border rounded-lg"
-                        value={newClient.email}
-                        onChange={e => setNewClient({ ...newClient, email: e.target.value })}
+                        placeholder="Email do novo atendente"
+                        className="flex-1 p-2 border rounded-lg"
+                        value={inviteEmail}
+                        onChange={e => setInviteEmail(e.target.value)}
                     />
-                </div>
-                <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Telefone (WhatsApp)</label>
-                    <input
-                        required
-                        type="tel"
-                        className="w-full p-2 border rounded-lg"
-                        value={newClient.phone}
-                        onChange={e => setNewClient({ ...newClient, phone: e.target.value })}
-                    />
-                </div>
-                <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Valor do Imóvel (R$)</label>
-                    <input
-                        required
-                        type="number"
-                        className="w-full p-2 border rounded-lg"
-                        value={newClient.value}
-                        onChange={e => setNewClient({ ...newClient, value: e.target.value })}
-                    />
-                </div>
-                <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Tipo de Financiamento</label>
-                    <select
-                        className="w-full p-2 border rounded-lg"
-                        value={newClient.type}
-                        onChange={e => setNewClient({ ...newClient, type: e.target.value })}
+                    <button type="submit" className="bg-slate-900 text-white px-4 py-2 rounded-lg font-bold hover:bg-slate-800">
+                        Autorizar
+                    </button>
+                </form>
+            </div>
+
+            {/* Migration Tool */}
+            <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100">
+                <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+                    <SettingsIcon className="text-slate-500" /> Ferramentas de Sistema
+                </h3>
+                <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg">
+                    <h4 className="font-bold text-blue-800 mb-2">Migração de Dados Legados</h4>
+                    <p className="text-sm text-blue-600 mb-4">
+                        Use esta ferramenta para atualizar processos antigos para o novo fluxo de porcentagem (20% - 100%).
+                        <br />
+                        Analysis {'->'} Crédito (20%) | Approved {'->'} Avaliação (40%) | Contract {'->'} Contrato (100%)
+                    </p>
+                    <button
+                        onClick={async () => {
+                            if (confirm('Tem certeza? Isso atualizará os status dos processos antigos.')) {
+                                const res = await dataService.migrateLegacyProcesses();
+                                alert(res.message);
+                                loadData();
+                            }
+                        }}
+                        className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-blue-700 transition-colors"
                     >
-                        <option>Minha Casa Minha Vida</option>
-                        <option>SBPE</option>
-                        <option>Pró-Cotista</option>
-                    </select>
-                </div>
-            </div>
-
-            {/* Participants Section */}
-            <div className="border-t pt-4">
-                <div className="flex justify-between items-center mb-4">
-                    <h4 className="font-bold text-slate-700">Participantes / Cônjuge</h4>
-                    <button type="button" onClick={handleAddParticipant} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
-                        <Plus size={16} /> Adicionar
+                        Executar Migração
                     </button>
                 </div>
-                <div className="space-y-3">
-                    {participants.map((part, index) => (
-                        <div key={index} className="flex gap-2 items-start bg-slate-50 p-3 rounded-lg">
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 flex-1">
-                                <input
-                                    type="text" placeholder="Nome"
-                                    className="text-xs p-2 border rounded"
-                                    value={part.name}
-                                    onChange={e => handleParticipantChange(index, 'name', e.target.value)}
-                                />
-                                <input
-                                    type="text" placeholder="CPF"
-                                    className="text-xs p-2 border rounded"
-                                    value={part.cpf}
-                                    onChange={e => handleParticipantChange(index, 'cpf', e.target.value)}
-                                />
-                                <input
-                                    type="text" placeholder="Renda Mensal"
-                                    className="text-xs p-2 border rounded"
-                                    value={part.income}
-                                    onChange={e => handleParticipantChange(index, 'income', e.target.value)}
-                                />
-                                <select
-                                    className="text-xs p-2 border rounded"
-                                    value={part.role}
-                                    onChange={e => handleParticipantChange(index, 'role', e.target.value as any)}
-                                >
-                                    <option>Conjuge</option>
-                                    <option>Composicao</option>
-                                    <option>Outro</option>
-                                </select>
-                            </div>
-                            <button type="button" onClick={() => handleRemoveParticipant(index)} className="text-red-400 hover:text-red-600 p-1">
-                                <Trash2 size={16} />
-                            </button>
-                        </div>
-                    ))}
-                </div>
             </div>
+        </div >
+    );
 
-            {/* Custom Fields Section */}
-            <div className="border-t pt-4">
-                <div className="flex justify-between items-center mb-4">
-                    <h4 className="font-bold text-slate-700">Campos Personalizados</h4>
-                    <button type="button" onClick={handleAddField} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
-                        <Plus size={16} /> Adicionar Campo
+    return (
+        <div className="min-h-screen bg-slate-50/50 p-8">
+            {/* Top Navigation */}
+            <div className="flex justify-between items-center mb-8">
+                <div>
+                    <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
+                    <p className="text-slate-500">Bem-vindo ao CRM Prime Habitação</p>
+                </div>
+                <div className="flex bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
+                    <button
+                        onClick={() => setActiveTab('dashboard')}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'dashboard' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        Visão Geral
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('processes')}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'processes' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        Processos
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('new_client')}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'new_client' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        + Novo Cliente
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('settings')}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'settings' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        Configurações
                     </button>
                 </div>
-                <div className="space-y-2">
-                    {customFields.map((field, index) => (
-                        <div key={index} className="flex gap-2">
-                            <input
-                                type="text"
-                                placeholder="Nome do Campo (ex: Data de Nascimento)"
-                                className="flex-1 p-2 border rounded-lg text-sm"
-                                value={field.label}
-                                onChange={e => handleFieldChange(index, 'label', e.target.value)}
-                            />
-                            <input
-                                type="text"
-                                placeholder="Valor"
-                                className="flex-1 p-2 border rounded-lg text-sm"
-                                value={field.value}
-                                onChange={e => handleFieldChange(index, 'value', e.target.value)}
-                            />
-                            <button type="button" onClick={() => handleRemoveField(index)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg">
-                                <Trash2 size={18} />
-                            </button>
-                        </div>
-                    ))}
-                </div>
             </div>
 
-            <div className="pt-4 border-t flex justify-end">
-                <button
-                    type="submit"
-                    disabled={creating}
-                    className="bg-slate-900 text-white px-8 py-3 rounded-xl font-bold hover:bg-slate-800 disabled:opacity-50 flex items-center gap-2"
-                >
-                    {creating ? <Loader2 className="animate-spin" /> : <Save size={20} />}
-                    Cadastrar Cliente
-                </button>
-            </div>
-        </form>
-    </div>
-);
+            {activeTab === 'dashboard' && renderOverview()}
+            {activeTab === 'processes' && renderProcesses()}
+            {activeTab === 'new_client' && renderNewClient()}
+            {activeTab === 'settings' && renderSettings()}
 
-const renderSettings = () => (
-    <div className="max-w-2xl mx-auto">
-        <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100 mb-8">
-            <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
-                <UserPlus className="text-amber-500" /> Cadastro de Atendente
-            </h3>
-            <p className="text-sm text-slate-500 mb-4">Adicione o e-mail do atendente abaixo. Quando ele criar uma conta no site, receberá automaticamente o acesso de atendente.</p>
-
-            <form onSubmit={handleInviteAttendant} className="flex gap-2">
-                <input
-                    required
-                    type="email"
-                    placeholder="Email do novo atendente"
-                    className="flex-1 p-2 border rounded-lg"
-                    value={inviteEmail}
-                    onChange={e => setInviteEmail(e.target.value)}
-                />
-                <button type="submit" className="bg-slate-900 text-white px-4 py-2 rounded-lg font-bold hover:bg-slate-800">
-                    Autorizar
-                </button>
-            </form>
-        </div>
-
-        {/* Migration Tool */}
-        <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100">
-            <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
-                <SettingsIcon className="text-slate-500" /> Ferramentas de Sistema
-            </h3>
-            <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg">
-                <h4 className="font-bold text-blue-800 mb-2">Migração de Dados Legados</h4>
-                <p className="text-sm text-blue-600 mb-4">
-                    Use esta ferramenta para atualizar processos antigos para o novo fluxo de porcentagem (20% - 100%).
-                    <br />
-                    Analysis {'->'} Crédito (20%) | Approved {'->'} Avaliação (40%) | Contract {'->'} Contrato (100%)
-                </p>
-                <button
-                    onClick={async () => {
-                        if (confirm('Tem certeza? Isso atualizará os status dos processos antigos.')) {
-                            const res = await dataService.migrateLegacyProcesses();
-                            alert(res.message);
-                            loadData();
-                        }
-                    }}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-blue-700 transition-colors"
-                >
-                    Executar Migração
-                </button>
-            </div>
-        </div>
-    </div >
-);
-
-return (
-    <div className="min-h-screen bg-slate-50/50 p-8">
-        {/* Top Navigation */}
-        <div className="flex justify-between items-center mb-8">
-            <div>
-                <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
-                <p className="text-slate-500">Bem-vindo ao CRM Prime Habitação</p>
-            </div>
-            <div className="flex bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
-                <button
-                    onClick={() => setActiveTab('dashboard')}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'dashboard' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                    Visão Geral
-                </button>
-                <button
-                    onClick={() => setActiveTab('processes')}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'processes' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                    Processos
-                </button>
-                <button
-                    onClick={() => setActiveTab('new_client')}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'new_client' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                    + Novo Cliente
-                </button>
-                <button
-                    onClick={() => setActiveTab('settings')}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'settings' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                    Configurações
-                </button>
-            </div>
-        </div>
-
-        {activeTab === 'dashboard' && renderOverview()}
-        {activeTab === 'processes' && renderProcesses()}
-        {activeTab === 'new_client' && renderNewClient()}
-        {activeTab === 'settings' && renderSettings()}
-
-        {/* Stage Input Modal */}
-        <StageInputModal
-            isOpen={stageModal.isOpen}
-            stage={stageModal.targetStage}
-            onClose={() => setStageModal({ isOpen: false, processId: '', targetStage: 'credit_analysis' })}
-            onSubmit={handleStageTransition}
-        />
-
-        {/* Notification Selector Modal */}
-        {notificationModal.process && (
-            <NotificationSelector
-                process={notificationModal.process}
-                onClose={() => setNotificationModal({ isOpen: false, process: null })}
-                onSend={handleNotificationSend}
+            {/* Stage Input Modal */}
+            <StageInputModal
+                isOpen={stageModal.isOpen}
+                stage={stageModal.targetStage}
+                onClose={() => setStageModal({ isOpen: false, processId: '', targetStage: 'credit_analysis' })}
+                onSubmit={handleStageTransition}
             />
-        )}
-    </div>
-);
+
+            {/* Notification Selector Modal */}
+            {notificationModal.process && (
+                <NotificationSelector
+                    process={notificationModal.process}
+                    onClose={() => setNotificationModal({ isOpen: false, process: null })}
+                    onSend={handleNotificationSend}
+                />
+            )}
+        </div>
+    );
 };
