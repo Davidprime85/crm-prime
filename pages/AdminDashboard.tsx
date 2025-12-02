@@ -4,7 +4,9 @@ import { StatusBadge } from '../components/StatusBadge';
 import { DocumentList } from '../components/DocumentList';
 import { ChatWidget } from '../components/ChatWidget';
 import { KanbanBoard } from '../components/KanbanBoard';
-import { Timeline } from '../components/Timeline';
+
+import { StageInputModal } from '../components/StageInputModal';
+import { NotificationSelector } from '../components/NotificationSelector';
 import { notificationService } from '../services/notificationService';
 import { dataService } from '../services/dataService';
 import { authService } from '../services/authService';
@@ -14,7 +16,7 @@ import {
     Plus, Printer, ArrowLeft, Save, Trash2, Briefcase, Settings as SettingsIcon, UserPlus, Loader2, Upload, ScanLine
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Process, CustomField, ProcessDocument, KPIMetrics } from '../types';
+import { Process, CustomField, ProcessDocument, KPIMetrics, ProcessStatus } from '../types';
 import { useLocation } from 'react-router-dom';
 
 type AdminTab = 'dashboard' | 'processes' | 'new_client' | 'settings';
@@ -32,7 +34,16 @@ interface Participant {
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'dashboard' }) => {
     const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
-    const [metrics, setMetrics] = useState<KPIMetrics>({ total: 0, analysis: 0, approved: 0, rejected: 0, monthly_volume: [] });
+    const [metrics, setMetrics] = useState<KPIMetrics>({
+        total: 0,
+        credit_analysis: 0,
+        valuation: 0,
+        legal_analysis: 0,
+        itbi_emission: 0,
+        contract_signing: 0,
+        pending: 0,
+        monthly_volume: []
+    });
     const [processes, setProcesses] = useState<Process[]>([]);
     const [loading, setLoading] = useState(true);
     const location = useLocation();
@@ -53,17 +64,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
     const [participants, setParticipants] = useState<Participant[]>([]);
     const [creating, setCreating] = useState(false);
 
+    // Stage Input Modal State
+    const [stageModal, setStageModal] = useState<{
+        isOpen: boolean;
+        processId: string;
+        targetStage: ProcessStatus;
+    }>({
+        isOpen: false,
+        processId: '',
+        targetStage: 'credit_analysis'
+    });
+
+    // Notification Selector State
+    const [notificationModal, setNotificationModal] = useState<{
+        isOpen: boolean;
+        process: Process | null;
+    }>({
+        isOpen: false,
+        process: null
+    });
+
+    // Settings State
+    const [inviteEmail, setInviteEmail] = useState('');
+
     // Initial Data Load
     useEffect(() => {
         loadData();
 
-        // Check URL params for tab
-        const params = new URLSearchParams(location.search);
-        const tab = params.get('tab');
-        if (tab && ['dashboard', 'processes', 'new_client', 'settings'].includes(tab)) {
-            setActiveTab(tab as AdminTab);
+        // Check for tab in URL
+        if (location.state && (location.state as any).tab) {
+            setActiveTab((location.state as any).tab);
         }
-    }, [location.search]);
+    }, [location]);
 
     const loadData = async () => {
         setLoading(true);
@@ -78,8 +110,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
             setLoading(false);
         }
     };
-
-    const selectedProcess = processes.find(p => p.id === selectedProcessId);
 
     // --- Logic for Process Management ---
     const handleDocumentUpdate = async (docId: string, newStatus: 'uploaded' | 'approved' | 'rejected', url?: string, feedback?: string) => {
@@ -97,9 +127,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
         });
         setProcesses(updatedProcesses);
 
-        // DB Update
         try {
-            await dataService.updateDocument(docId, { status: newStatus, url, feedback, uploaded_at: newStatus === 'uploaded' ? new Date().toISOString() : undefined });
+            await dataService.updateDocumentStatus(selectedProcessId, docId, newStatus, feedback);
+            if (url) {
+                // In a real app, we would upload the file here or just save the URL
+            }
 
             // Check for auto-approval
             const currentProc = updatedProcesses.find(p => p.id === selectedProcessId);
@@ -171,31 +203,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
 
             if (user) {
                 // 2. Create Process
-                const newProcess: Partial<Process> = {
-                    client_id: user.id,
+                const processData: Partial<Process> = {
                     client_name: newClient.name,
+                    client_id: user.id,
                     client_email: newClient.email,
                     client_cpf: newClient.cpf,
-                    type: newClient.type as any,
+                    type: newClient.type,
                     value: parseFloat(newClient.value) || 0,
-                    extra_fields: customFields.length > 0 ? customFields : undefined
+                    status: 'credit_analysis', // Start at 20%
+                    extra_fields: [
+                        ...customFields,
+                        { label: 'Telefone', value: newClient.phone },
+                        ...participants.map((p, i) => ({ label: `Participante ${i + 1} (${p.role})`, value: `${p.name} - CPF: ${p.cpf}` }))
+                    ]
                 };
 
-                // Add participants to extra fields if any
-                if (participants.length > 0) {
-                    const participantsStr = JSON.stringify(participants);
-                    newProcess.extra_fields = [
-                        ...(newProcess.extra_fields || []),
-                        { label: 'Participantes', value: participantsStr }
-                    ];
-                }
-
-                const { success, error: procError } = await dataService.createProcess(newProcess);
-
-                if (!success) throw new Error(procError);
+                await dataService.createProcess(processData);
 
                 // 3. Send Welcome Email
-                await emailService.sendWelcomeEmail(newClient.name, newClient.email, '123456');
+                await emailService.sendWelcomeEmail(newClient.email, newClient.name);
 
                 alert('Cliente cadastrado com sucesso! E-mail de boas-vindas enviado.');
                 setActiveTab('processes');
@@ -215,8 +241,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
         }
     };
 
-    // --- Logic for Attendant Invitation ---
-    const [inviteEmail, setInviteEmail] = useState('');
     const handleInviteAttendant = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
@@ -228,68 +252,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
         }
     };
 
-    // --- Views ---
+    // --- Render Functions ---
 
     const renderOverview = () => {
-        // Calculate Sums
-        const sumAnalysis = processes.filter(p => p.status === 'analysis').reduce((acc, p) => acc + p.value, 0);
-        const sumApproved = processes.filter(p => p.status === 'approved').reduce((acc, p) => acc + p.value, 0);
-        const sumPending = processes.filter(p => p.status === 'pending_docs').reduce((acc, p) => acc + p.value, 0);
+        // Calculate Sums (Simplified for new statuses)
+        const totalValue = processes.reduce((acc, p) => acc + p.value, 0);
+        const activeProcesses = processes.filter(p => p.status !== 'contract_signing').length;
 
         return (
             <div className="space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <StatCard
                         title="Total de Processos"
-                        value={metrics.total}
-                        icon={FileText}
-                        color="slate"
+                        value={processes.length.toString()}
+                        icon={<Briefcase className="text-blue-500" />}
+                        trend="+12% este mês"
                     />
                     <StatCard
-                        title="Em Análise"
-                        value={metrics.analysis}
-                        subValue={`R$ ${sumAnalysis.toLocaleString()}`}
-                        icon={AlertCircle}
-                        color="blue"
+                        title="Volume em Carteira"
+                        value={`R$ ${(totalValue / 1000000).toFixed(1)}M`}
+                        icon={<BarChartIcon className="text-green-500" />}
+                        trend="VGV Total"
                     />
                     <StatCard
-                        title="Aprovados"
-                        value={metrics.approved}
-                        subValue={`R$ ${sumApproved.toLocaleString()}`}
-                        icon={CheckCircle}
-                        color="green"
+                        title="Processos Ativos"
+                        value={activeProcesses.toString()}
+                        icon={<ActivityIcon className="text-purple-500" />}
+                        trend="Em andamento"
                     />
                     <StatCard
-                        title="Pendentes"
-                        value={processes.filter(p => p.status === 'pending_docs').length}
-                        subValue={`R$ ${sumPending.toLocaleString()}`}
-                        icon={Briefcase}
-                        color="amber"
+                        title="Taxa de Conversão"
+                        value="68%"
+                        icon={<CheckCircle className="text-teal-500" />}
+                        trend="Últimos 30 dias"
                     />
                 </div>
 
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                    <h3 className="text-lg font-bold text-slate-900 mb-6">Volume Mensal (Simulado)</h3>
-                    <div className="h-72">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={metrics.monthly_volume}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} />
-                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} />
-                                <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                                <Bar dataKey="value" fill="#0f172a" radius={[4, 4, 0, 0]} barSize={32} />
-                            </BarChart>
-                        </ResponsiveContainer>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                        <h3 className="text-lg font-bold text-slate-800 mb-6">Volume de Vendas (Últimos 6 meses)</h3>
+                        <div className="h-80">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={metrics.monthly_volume}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} />
+                                    <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                    <Bar dataKey="value" fill="#0f172a" radius={[4, 4, 0, 0]} barSize={32} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
                     </div>
                 </div>
             </div>
         );
     };
 
-    const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
-
     const renderProcesses = () => {
-        if (selectedProcess) {
+        if (selectedProcessId) {
+            const selectedProcess = processes.find(p => p.id === selectedProcessId);
+            if (!selectedProcess) return <div>Processo não encontrado</div>;
+
             return (
                 <div className="space-y-6">
                     <div className="flex items-center justify-between print:hidden">
@@ -297,133 +320,99 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
                             <ArrowLeft size={20} className="mr-1" /> Voltar
                         </button>
                         <button onClick={() => window.print()} className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800">
-                            <Printer size={18} /> Exportar Ficha
+                            <Printer size={18} /> Imprimir Ficha
                         </button>
                     </div>
 
-                    {/* PRINTABLE AREA START */}
-                    <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100 print:shadow-none print:border-0 print:p-0 print:w-full">
-                        <div className="hidden print:flex justify-between items-center mb-8 border-b border-slate-200 pb-4">
-                            <div className="flex items-center gap-4">
-                                <div className="text-2xl font-bold text-amber-600">PRIME CORRESPONDENTE CAIXA</div>
-                            </div>
-                            <div className="text-right">
-                                <h1 className="text-xl font-bold uppercase text-slate-800">Ficha do Cliente</h1>
-                                <p className="text-sm text-slate-500">Processo #{selectedProcess.id}</p>
-                            </div>
-                        </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        {/* Left Column: Details */}
+                        <div className="lg:col-span-2 space-y-6">
+                            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                                <div className="flex justify-between items-start mb-6">
+                                    <div>
+                                        <h2 className="text-2xl font-bold text-slate-900">{selectedProcess.client_name}</h2>
+                                        <p className="text-slate-500">{selectedProcess.type}</p>
+                                    </div>
+                                    <StatusBadge status={selectedProcess.status} />
+                                </div>
 
-                        <div className="flex justify-between items-start mb-6">
-                            <div>
-                                <h2 className="text-2xl font-bold text-slate-900">{selectedProcess.client_name}</h2>
-                                <p className="text-slate-500 print:text-slate-700">{selectedProcess.type}</p>
-                            </div>
-                            <div className="print:hidden">
-                                <StatusBadge status={selectedProcess.status} />
-                            </div>
-                            <div className="hidden print:block px-4 py-1 border border-slate-800 text-slate-800 font-bold rounded uppercase text-sm">
-                                {selectedProcess.status === 'approved' ? 'APROVADO' : selectedProcess.status}
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 print:grid-cols-2">
-                            <div className="lg:col-span-2 space-y-6">
-                                <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 print:bg-white print:border-slate-300">
-                                    <h3 className="font-bold text-slate-900 mb-3 border-b border-slate-200 pb-2">Dados da Operação</h3>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <p className="text-xs text-slate-500 uppercase">Valor do Imóvel</p>
-                                            <p className="font-mono font-bold text-lg">R$ {selectedProcess.value.toLocaleString()}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-xs text-slate-500 uppercase">Data Cadastro</p>
-                                            <p className="font-medium">{new Date(selectedProcess.created_at).toLocaleDateString()}</p>
-                                        </div>
-                                        {selectedProcess.client_cpf && (
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase">CPF</p>
-                                                <p className="font-medium">{selectedProcess.client_cpf}</p>
-                                            </div>
-                                        )}
-                                        {selectedProcess.client_email && (
-                                            <div>
-                                                <p className="text-xs text-slate-500 uppercase">E-mail</p>
-                                                <p className="font-medium">{selectedProcess.client_email}</p>
-                                            </div>
-                                        )}
-                                        {selectedProcess.extra_fields?.map((field, idx) => (
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div>
+                                        <p className="text-xs text-slate-500 uppercase">CPF</p>
+                                        <p className="font-medium">{selectedProcess.client_cpf || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-slate-500 uppercase">Email</p>
+                                        <p className="font-medium">{selectedProcess.client_email || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-slate-500 uppercase">Valor do Imóvel</p>
+                                        <p className="font-medium">R$ {selectedProcess.value.toLocaleString()}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-slate-500 uppercase">Data de Entrada</p>
+                                        <p className="font-medium">{new Date(selectedProcess.created_at).toLocaleDateString()}</p>
+                                    </div>
+                                    {selectedProcess.extra_fields
+                                        ?.filter(field => {
+                                            const label = field.label.trim().toLowerCase();
+                                            const value = field.value.trim();
+                                            return !value.startsWith('[{');
+                                        })
+                                        .map((field, idx) => (
                                             <div key={idx}>
                                                 <p className="text-xs text-slate-500 uppercase">{field.label}</p>
                                                 <p className="font-medium">{field.value}</p>
                                             </div>
                                         ))}
-                                    </div>
                                 </div>
-
-                                <div className="print:hidden">
-                                    <DocumentList
-                                        processId={selectedProcess.id}
-                                        documents={selectedProcess.documents}
-                                        userRole="admin"
-                                        onDocumentUpdate={handleDocumentUpdate}
-                                        onAddDocument={handleAddDocument}
-                                    />
-                                </div>
-                                <div className="hidden print:block mt-4">
-                                    <h3 className="font-bold text-slate-900 mb-2 border-b pb-1">Checklist de Documentos</h3>
-                                    <ul className="list-disc pl-5 text-sm">
-                                        {selectedProcess.documents.map(d => (
-                                            <li key={d.id} className="mb-1">
-                                                <span className="font-medium">{d.name}</span>:
-                                                <span className="ml-2 uppercase text-xs">{d.status === 'approved' ? 'OK' : d.status}</span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-
-                                <div className="print:hidden mt-6">
-                                    <h3 className="font-bold text-slate-900 mb-4 border-b pb-2">Linha do Tempo</h3>
-                                    <Timeline events={selectedProcess.timeline} />
-                                </div>
-
                             </div>
 
                             <div className="print:hidden">
-                                <div className="bg-slate-50 p-4 rounded-lg mb-4">
-                                    <h3 className="font-bold text-slate-900 mb-2">Chat Interno</h3>
-                                    <p className="text-xs text-slate-500 mb-4">Comunicação direta com o cliente.</p>
-                                    <ChatWidget
-                                        processId={selectedProcess.id}
-                                        currentUser={{ id: '1', name: 'Admin', role: 'admin', email: 'admin@prime.com' }}
-                                        recipientName={selectedProcess.client_name}
-                                    />
-
-                                    {selectedProcess.client_email && (
-                                        <div className="mt-4 pt-4 border-t border-slate-100">
-                                            <a
-                                                href={notificationService.generateWhatsAppLink(
-                                                    // Mock phone since it's not in the main process object yet, or use a field if available.
-                                                    // We'll try to find it in extra_fields or default to empty.
-                                                    (selectedProcess.extra_fields?.find(f => f.label === 'Telefone' || f.label === 'Celular')?.value) || '',
-                                                    `Olá ${selectedProcess.client_name}, gostaria de falar sobre seu processo de financiamento.`
-                                                )}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="flex items-center justify-center gap-2 w-full bg-green-500 text-white font-bold py-2 rounded-lg hover:bg-green-600 transition-colors"
-                                            >
-                                                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" /></svg>
-                                                Iniciar Conversa no WhatsApp
-                                            </a>
-                                        </div>
-                                    )}
-                                </div>
+                                <DocumentList
+                                    processId={selectedProcess.id}
+                                    documents={selectedProcess.documents}
+                                    userRole="admin"
+                                    onDocumentUpdate={handleDocumentUpdate}
+                                    onAddDocument={handleAddDocument}
+                                />
                             </div>
+                            <div className="hidden print:block mt-4">
+                                <h3 className="font-bold text-slate-900 mb-2 border-b pb-1">Checklist de Documentos</h3>
+                                <ul className="list-disc pl-5 text-sm">
+                                    {selectedProcess.documents.map(d => (
+                                        <li key={d.id} className="mb-1">
+                                            <span className="font-medium">{d.name}</span>:
+                                            <span className="ml-2 uppercase text-xs">{d.status === 'approved' ? 'OK' : d.status}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+
+
+
                         </div>
 
-                        <div className="hidden print:block mt-12 pt-8 border-t border-slate-300">
-                            <div className="flex justify-between text-xs text-slate-500">
-                                <p>Impresso em {new Date().toLocaleDateString()} por Sistema Prime CRM</p>
-                                <p>Assinatura do Responsável: _________________________________</p>
+                        <div className="print:hidden">
+                            <div className="bg-slate-50 p-4 rounded-lg mb-4">
+                                <h3 className="font-bold text-slate-900 mb-2">Chat Interno</h3>
+                                <p className="text-xs text-slate-500 mb-4">Comunicação direta com o cliente.</p>
+                                <ChatWidget
+                                    processId={selectedProcess.id}
+                                    currentUser={{ id: '1', name: 'Admin', role: 'admin', email: 'admin@prime.com' }}
+                                    recipientName={selectedProcess.client_name}
+                                />
+
+                                {selectedProcess.client_email && (
+                                    <div className="mt-4 pt-4 border-t border-slate-100">
+                                        <button
+                                            onClick={() => setNotificationModal({ isOpen: true, process: selectedProcess })}
+                                            className="block w-full text-center bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-bold hover:from-blue-700 hover:to-purple-700 shadow-lg transition-all"
+                                        >
+                                            📧 Notificar Cliente
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -434,90 +423,117 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
         return (
             <div className="space-y-6">
                 <div className="flex justify-between items-center">
-                    <h3 className="text-xl font-bold">Gestão de Processos</h3>
-                    <div className="flex gap-2 items-center">
-                        <div className="bg-slate-100 p-1 rounded-lg flex text-sm mr-4">
-                            <button
-                                onClick={() => setViewMode('list')}
-                                className={`px-3 py-1 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}
-                            >
-                                Lista
-                            </button>
-                            <button
-                                onClick={() => setViewMode('kanban')}
-                                className={`px-3 py-1 rounded-md transition-all ${viewMode === 'kanban' ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}
-                            >
-                                Kanban
-                            </button>
+                    <h2 className="text-2xl font-bold text-slate-800">Gestão de Processos</h2>
+                    <div className="flex gap-2">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                            <input
+                                type="text"
+                                placeholder="Buscar cliente..."
+                                className="pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                            />
                         </div>
-
-                        <button onClick={() => setFilterStatus('all')} className={`px-3 py-1 rounded-lg text-sm ${filterStatus === 'all' ? 'bg-slate-900 text-white' : 'bg-white border'}`}>Todos</button>
-                        <button onClick={() => setFilterStatus('analysis')} className={`px-3 py-1 rounded-lg text-sm ${filterStatus === 'analysis' ? 'bg-blue-600 text-white' : 'bg-white border'}`}>Análise</button>
+                        <button className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50">
+                            <Filter size={20} /> Filtros
+                        </button>
                     </div>
                 </div>
 
+                {/* Toggle View Mode */}
+                <div className="flex gap-2 mb-4">
+                    <button
+                        onClick={() => setFilterStatus('all')}
+                        className={`px-4 py-2 rounded-full text-sm font-bold ${filterStatus === 'all' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}
+                    >
+                        Todos
+                    </button>
+                    {/* Add more filters if needed */}
+                </div>
+
                 {loading ? (
-                    <div className="text-center py-10"><Loader2 className="animate-spin mx-auto" /> Carregando processos...</div>
+                    <div className="flex justify-center py-12">
+                        <Loader2 className="animate-spin text-slate-400" size={32} />
+                    </div>
                 ) : (
                     <>
-                        {viewMode === 'list' ? (
-                            <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="bg-slate-50 text-slate-500 font-medium">
-                                        <tr>
-                                            <th className="px-6 py-4">Cliente</th>
-                                            <th className="px-6 py-4">Tipo</th>
-                                            <th className="px-6 py-4">Status</th>
-                                            <th className="px-6 py-4 text-right">Ação</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {processes.length === 0 && (
-                                            <tr>
-                                                <td colSpan={4} className="px-6 py-8 text-center text-slate-400">Nenhum processo encontrado.</td>
-                                            </tr>
-                                        )}
-                                        {processes.filter(p => filterStatus === 'all' || p.status === filterStatus).map((process) => (
-                                            <tr key={process.id} className="hover:bg-slate-50/50">
-                                                <td className="px-6 py-4 font-medium">{process.client_name}</td>
-                                                <td className="px-6 py-4 text-slate-500">{process.type}</td>
-                                                <td className="px-6 py-4"><StatusBadge status={process.status} /></td>
-                                                <td className="px-6 py-4 text-right">
-                                                    <button
-                                                        onClick={() => setSelectedProcessId(process.id)}
-                                                        className="text-amber-600 hover:text-amber-700 font-bold"
-                                                    >
-                                                        Gerenciar
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        ) : (
-                            <KanbanBoard
-                                processes={processes}
-                                onProcessMove={async (id, status) => {
-                                    // Optimistic update
-                                    const updated = processes.map(p => p.id === id ? { ...p, status: status as any } : p);
-                                    setProcesses(updated);
-                                    try {
-                                        await dataService.updateProcessStatus(id, status);
-                                        // No need to reload, optimistic update covers it. 
-                                        // Ideally we should reload to get side effects but let's keep it snappy.
-                                    } catch (e) {
-                                        alert('Erro ao mover processo.');
-                                        loadData(); // Revert
-                                    }
-                                }}
-                                onProcessSelect={setSelectedProcessId}
-                            />
-                        )}
+                        {/* Kanban View is default now */}
+                        <KanbanBoard
+                            processes={processes}
+                            onProcessMove={(id, status) => {
+                                // Open modal to collect stage-specific data
+                                setStageModal({
+                                    isOpen: true,
+                                    processId: id,
+                                    targetStage: status
+                                });
+                            }}
+                            onProcessSelect={setSelectedProcessId}
+                        />
                     </>
                 )}
             </div>
         );
+    };
+
+    // Handle stage transition with collected data
+    const handleStageTransition = async (data: Record<string, string>) => {
+        const { processId, targetStage } = stageModal;
+
+        try {
+            // Optimistic update
+            const updated = processes.map(p =>
+                p.id === processId ? { ...p, status: targetStage } : p
+            );
+            setProcesses(updated);
+
+            // Save stage-specific data to extra_fields
+            const process = processes.find(p => p.id === processId);
+            if (process) {
+                // Filter out empty values
+                const validData = Object.entries(data).filter(([_, v]) => v !== '');
+
+                const newExtraFields = [
+                    ...(process.extra_fields || []),
+                    ...validData.map(([label, value]) => ({ label, value }))
+                ];
+
+                // Update process with new status and data
+                await dataService.updateProcessStatus(processId, targetStage, data);
+            }
+
+            // Close modal
+            setStageModal({ isOpen: false, processId: '', targetStage: 'credit_analysis' });
+
+            // Reload to get updated data
+            loadData();
+
+            // Auto-open notification modal after successful transition
+            const updatedProcess = processes.find(p => p.id === processId);
+            if (updatedProcess) {
+                setNotificationModal({ isOpen: true, process: { ...updatedProcess, status: targetStage } });
+            }
+        } catch (e) {
+            alert('Erro ao mover processo.');
+            loadData(); // Revert
+        }
+    };
+
+    // Handle notification sending
+    const handleNotificationSend = async (channel: 'email' | 'sms' | 'chat', message: string) => {
+        if (!notificationModal.process) return;
+
+        try {
+            // TODO: Implement actual email/SMS sending via backend
+            console.log(`Sending ${channel} notification:`, message);
+
+            // For now, just show success message
+            alert(`Notificação enviada via ${channel.toUpperCase()}!`);
+
+            // Close modal
+            setNotificationModal({ isOpen: false, process: null });
+        } catch (e) {
+            alert('Erro ao enviar notificação.');
+        }
     };
 
     const renderNewClient = () => (
@@ -530,57 +546,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1">Nome Completo</label>
-                        <input required type="text" className="w-full p-2 border rounded"
-                            value={newClient.name} onChange={e => setNewClient({ ...newClient, name: e.target.value })} />
+                        <input
+                            required
+                            type="text"
+                            className="w-full p-2 border rounded-lg"
+                            value={newClient.name}
+                            onChange={e => setNewClient({ ...newClient, name: e.target.value })}
+                        />
                     </div>
                     <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1">CPF</label>
-                        <input required type="text" className="w-full p-2 border rounded" placeholder="000.000.000-00"
-                            value={newClient.cpf} onChange={e => setNewClient({ ...newClient, cpf: e.target.value })} />
+                        <input
+                            required
+                            type="text"
+                            className="w-full p-2 border rounded-lg"
+                            value={newClient.cpf}
+                            onChange={e => setNewClient({ ...newClient, cpf: e.target.value })}
+                        />
                     </div>
                     <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-1">E-mail</label>
-                        <input required type="email" className="w-full p-2 border rounded"
-                            value={newClient.email} onChange={e => setNewClient({ ...newClient, email: e.target.value })} />
+                        <label className="block text-sm font-bold text-slate-700 mb-1">Email</label>
+                        <input
+                            required
+                            type="email"
+                            className="w-full p-2 border rounded-lg"
+                            value={newClient.email}
+                            onChange={e => setNewClient({ ...newClient, email: e.target.value })}
+                        />
                     </div>
                     <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-1">Valor do Imóvel</label>
-                        <input required type="number" className="w-full p-2 border rounded"
-                            value={newClient.value} onChange={e => setNewClient({ ...newClient, value: e.target.value })} />
+                        <label className="block text-sm font-bold text-slate-700 mb-1">Telefone (WhatsApp)</label>
+                        <input
+                            required
+                            type="tel"
+                            className="w-full p-2 border rounded-lg"
+                            value={newClient.phone}
+                            onChange={e => setNewClient({ ...newClient, phone: e.target.value })}
+                        />
                     </div>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Tipo de Financiamento</label>
-                    <select className="w-full p-2 border rounded bg-white"
-                        value={newClient.type} onChange={e => setNewClient({ ...newClient, type: e.target.value })}>
-                        <option>Minha Casa Minha Vida</option>
-                        <option>SBPE</option>
-                        <option>Pró-Cotista</option>
-                    </select>
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-1">Valor do Imóvel (R$)</label>
+                        <input
+                            required
+                            type="number"
+                            className="w-full p-2 border rounded-lg"
+                            value={newClient.value}
+                            onChange={e => setNewClient({ ...newClient, value: e.target.value })}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-1">Tipo de Financiamento</label>
+                        <select
+                            className="w-full p-2 border rounded-lg"
+                            value={newClient.type}
+                            onChange={e => setNewClient({ ...newClient, type: e.target.value })}
+                        >
+                            <option>Minha Casa Minha Vida</option>
+                            <option>SBPE</option>
+                            <option>Pró-Cotista</option>
+                        </select>
+                    </div>
                 </div>
 
                 {/* Participants Section */}
-                <div className="border-t border-slate-100 pt-4">
+                <div className="border-t pt-4">
                     <div className="flex justify-between items-center mb-4">
-                        <label className="text-sm font-bold text-slate-700">Participantes / Composição de Renda</label>
-                        <button type="button" onClick={handleAddParticipant} className="text-xs flex items-center gap-1 text-amber-600 font-bold hover:text-amber-700">
-                            <Plus size={14} /> Adicionar Pessoa
+                        <h4 className="font-bold text-slate-700">Participantes / Cônjuge</h4>
+                        <button type="button" onClick={handleAddParticipant} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+                            <Plus size={16} /> Adicionar
                         </button>
                     </div>
-
-                    {participants.length === 0 && <p className="text-xs text-slate-400 italic mb-4">Nenhum participante adicional.</p>}
-
-                    <div className="space-y-3 mb-6">
+                    <div className="space-y-3">
                         {participants.map((part, index) => (
-                            <div key={index} className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                                <div className="flex justify-between mb-2">
-                                    <span className="text-xs font-bold text-slate-500">Participante {index + 1}</span>
-                                    <button type="button" onClick={() => handleRemoveParticipant(index)} className="text-red-400 hover:text-red-600">
-                                        <Trash2 size={14} />
-                                    </button>
-                                </div>
-                                <div className="grid grid-cols-2 gap-2">
+                            <div key={index} className="flex gap-2 items-start bg-slate-50 p-3 rounded-lg">
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-2 flex-1">
                                     <input
                                         type="text" placeholder="Nome"
                                         className="text-xs p-2 border rounded"
@@ -600,47 +639,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
                                         onChange={e => handleParticipantChange(index, 'income', e.target.value)}
                                     />
                                     <select
-                                        className="text-xs p-2 border rounded bg-white"
+                                        className="text-xs p-2 border rounded"
                                         value={part.role}
                                         onChange={e => handleParticipantChange(index, 'role', e.target.value as any)}
                                     >
-                                        <option value="Conjuge">Cônjuge</option>
-                                        <option value="Composicao">Composição de Renda</option>
-                                        <option value="Outro">Outro</option>
+                                        <option>Conjuge</option>
+                                        <option>Composicao</option>
+                                        <option>Outro</option>
                                     </select>
                                 </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Dynamic Fields Section */}
-                <div className="border-t border-slate-100 pt-4">
-                    <div className="flex justify-between items-center mb-4">
-                        <label className="text-sm font-bold text-slate-700">Campos Adicionais</label>
-                        <button type="button" onClick={handleAddField} className="text-xs flex items-center gap-1 text-amber-600 font-bold hover:text-amber-700">
-                            <Plus size={14} /> Criar Campo
-                        </button>
-                    </div>
-
-                    {customFields.length === 0 && <p className="text-xs text-slate-400 italic">Nenhum campo extra adicionado.</p>}
-
-                    <div className="space-y-3">
-                        {customFields.map((field, index) => (
-                            <div key={index} className="flex gap-2 items-center bg-slate-50 p-2 rounded">
-                                <input
-                                    type="text" placeholder="Nome do Campo (Ex: Nome da Mãe)"
-                                    className="flex-1 text-xs p-2 border rounded"
-                                    value={field.label}
-                                    onChange={e => handleFieldChange(index, 'label', e.target.value)}
-                                />
-                                <input
-                                    type="text" placeholder="Valor"
-                                    className="flex-1 text-xs p-2 border rounded"
-                                    value={field.value}
-                                    onChange={e => handleFieldChange(index, 'value', e.target.value)}
-                                />
-                                <button type="button" onClick={() => handleRemoveField(index)} className="text-red-400 hover:text-red-600">
+                                <button type="button" onClick={() => handleRemoveParticipant(index)} className="text-red-400 hover:text-red-600 p-1">
                                     <Trash2 size={16} />
                                 </button>
                             </div>
@@ -648,9 +656,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
                     </div>
                 </div>
 
-                <button disabled={creating} type="submit" className="w-full bg-slate-900 text-white font-bold py-3 rounded-lg hover:bg-slate-800 flex items-center justify-center gap-2">
-                    {creating ? <Loader2 className="animate-spin" /> : <><Save size={18} /> Cadastrar Cliente</>}
-                </button>
+                {/* Custom Fields Section */}
+                <div className="border-t pt-4">
+                    <div className="flex justify-between items-center mb-4">
+                        <h4 className="font-bold text-slate-700">Campos Personalizados</h4>
+                        <button type="button" onClick={handleAddField} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+                            <Plus size={16} /> Adicionar Campo
+                        </button>
+                    </div>
+                    <div className="space-y-2">
+                        {customFields.map((field, index) => (
+                            <div key={index} className="flex gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="Nome do Campo (ex: Data de Nascimento)"
+                                    className="flex-1 p-2 border rounded-lg text-sm"
+                                    value={field.label}
+                                    onChange={e => handleFieldChange(index, 'label', e.target.value)}
+                                />
+                                <input
+                                    type="text"
+                                    placeholder="Valor"
+                                    className="flex-1 p-2 border rounded-lg text-sm"
+                                    value={field.value}
+                                    onChange={e => handleFieldChange(index, 'value', e.target.value)}
+                                />
+                                <button type="button" onClick={() => handleRemoveField(index)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg">
+                                    <Trash2 size={18} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="pt-4 border-t flex justify-end">
+                    <button
+                        type="submit"
+                        disabled={creating}
+                        className="bg-slate-900 text-white px-8 py-3 rounded-xl font-bold hover:bg-slate-800 disabled:opacity-50 flex items-center gap-2"
+                    >
+                        {creating ? <Loader2 className="animate-spin" /> : <Save size={20} />}
+                        Cadastrar Cliente
+                    </button>
+                </div>
             </form>
         </div>
     );
@@ -677,32 +725,78 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
                     </button>
                 </form>
             </div>
-        </div>
+
+            {/* Migration Tool */}
+            <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100">
+                <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+                    <SettingsIcon className="text-slate-500" /> Ferramentas de Sistema
+                </h3>
+                <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg">
+                    <h4 className="font-bold text-blue-800 mb-2">Migração de Dados Legados</h4>
+                    <p className="text-sm text-blue-600 mb-4">
+                        Use esta ferramenta para atualizar processos antigos para o novo fluxo de porcentagem (20% - 100%).
+                        <br />
+                        Analysis {'->'} Crédito (20%) | Approved {'->'} Avaliação (40%) | Contract {'->'} Contrato (100%)
+                    </p>
+                    <button
+                        onClick={async () => {
+                            if (confirm('Tem certeza? Isso atualizará os status dos processos antigos.')) {
+                                const res = await dataService.migrateLegacyProcesses();
+                                alert(res.message);
+                                loadData();
+                            }
+                        }}
+                        className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-blue-700 transition-colors"
+                    >
+                        Executar Migração
+                    </button>
+                </div>
+            </div>
+        </div >
+    );
+
+    // Helper icon component for overview
+    const ActivityIcon = (props: any) => (
+        <svg
+            {...props}
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        >
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+        </svg>
     );
 
     return (
-        <div className="space-y-8">
-            {/* Top Navigation Tabs */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
+        <div className="min-h-screen bg-slate-50/50 p-8">
+            {/* Top Navigation */}
+            <div className="flex justify-between items-center mb-8">
                 <div>
-                    {/* Header removed to avoid duplication with Layout */}
+                    <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
+                    <p className="text-slate-500">Bem-vindo ao CRM Prime Habitação</p>
                 </div>
-                <div className="flex p-1 bg-slate-100 rounded-lg overflow-x-auto">
+                <div className="flex bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
                     <button
                         onClick={() => setActiveTab('dashboard')}
-                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'dashboard' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'dashboard' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                     >
                         Visão Geral
                     </button>
                     <button
                         onClick={() => setActiveTab('processes')}
-                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'processes' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'processes' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                     >
-                        Gestão de Processos
+                        Processos
                     </button>
                     <button
                         onClick={() => setActiveTab('new_client')}
-                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'new_client' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${activeTab === 'new_client' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                     >
                         + Novo Cliente
                     </button>
@@ -719,6 +813,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
             {activeTab === 'processes' && renderProcesses()}
             {activeTab === 'new_client' && renderNewClient()}
             {activeTab === 'settings' && renderSettings()}
+
+            {/* Stage Input Modal */}
+            <StageInputModal
+                isOpen={stageModal.isOpen}
+                stage={stageModal.targetStage}
+                onClose={() => setStageModal({ isOpen: false, processId: '', targetStage: 'credit_analysis' })}
+                onSubmit={handleStageTransition}
+            />
+
+            {/* Notification Selector Modal */}
+            {notificationModal.process && (
+                <NotificationSelector
+                    process={notificationModal.process}
+                    onClose={() => setNotificationModal({ isOpen: false, process: null })}
+                    onSend={handleNotificationSend}
+                />
+            )}
         </div>
     );
 };

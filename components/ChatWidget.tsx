@@ -93,7 +93,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ processId, currentUser, 
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-24 right-6 w-14 h-14 bg-amber-500 hover:bg-amber-600 text-white rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-105 z-[90]"
+        className="fixed bottom-6 right-6 w-14 h-14 bg-amber-500 hover:bg-amber-600 text-white rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-105 z-[90]"
       >
         <MessageSquare size={24} />
       </button>
@@ -101,7 +101,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ processId, currentUser, 
   }
 
   return (
-    <div className="fixed bottom-24 right-6 w-80 md:w-96 bg-white rounded-xl shadow-2xl border border-slate-200 z-[90] flex flex-col overflow-hidden animate-in slide-in-from-bottom-5">
+    <div className="fixed bottom-6 right-6 w-80 md:w-96 bg-white rounded-xl shadow-2xl border border-slate-200 z-[90] flex flex-col overflow-hidden animate-in slide-in-from-bottom-5 max-h-[80vh]">
       {/* Header */}
       <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
         <div>

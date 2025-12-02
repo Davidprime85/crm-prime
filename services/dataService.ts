@@ -45,16 +45,6 @@ export const dataService = {
       created_at: p.created_at,
       updated_at: p.updated_at,
       extra_fields: p.extra_fields || [],
-      timeline: (() => {
-        const fields = p.extra_fields || [];
-        const timelineField = fields.find((f: any) => f.label === 'timeline_data');
-        if (timelineField) {
-          try {
-            return JSON.parse(timelineField.value);
-          } catch (e) { return []; }
-        }
-        return [];
-      })(),
       documents: p.process_documents ? p.process_documents.map((d: any) => ({
         id: d.id,
         name: d.name,
@@ -108,55 +98,31 @@ export const dataService = {
     return { success: true };
   },
 
-  async updateProcessStatus(processId: string, status: string) {
-    // 1. Get current process to update timeline
+  async updateProcessStatus(processId: string, status: string, stageData?: Record<string, string>) {
+    // Get current process to merge stageData
     const { data: currentProc } = await supabase
       .from('processes')
       .select('extra_fields, client_id')
       .eq('id', processId)
       .single();
 
-    let newTimeline = [];
-    if (currentProc && currentProc.extra_fields) {
-      // Check if extra_fields is array (old format) or object (new format potentially)
-      // Assuming extra_fields is JSON array of CustomField based on types.ts
-      // We will store timeline in a special field inside extra_fields or just append to it?
-      // Actually, let's store timeline in a specific JSON structure if possible.
-      // But extra_fields is defined as CustomField[] in types.ts.
-      // Let's cheat a bit and store it as a CustomField with label 'timeline_data' and value as JSON string.
-
-      const fields = currentProc.extra_fields as any[];
-      const timelineField = fields.find((f: any) => f.label === 'timeline_data');
-      if (timelineField) {
-        try {
-          newTimeline = JSON.parse(timelineField.value);
-        } catch (e) { newTimeline = []; }
-      }
-    }
-
-    const statusMap: Record<string, string> = {
-      'analysis': 'Em Análise',
-      'pending_docs': 'Pendência de Documentos',
-      'approved': 'Aprovado',
-      'rejected': 'Reprovado',
-      'contract': 'Contrato'
-    };
-
-    const newEvent = {
-      id: crypto.randomUUID(),
-      title: `Mudança para ${statusMap[status] || status}`,
-      date: new Date().toISOString(),
-      completed: true
-    };
-
-    newTimeline.push(newEvent);
-
     // Prepare extra_fields update
     let updatedFields = currentProc?.extra_fields || [];
-    // Remove old timeline field if exists
-    updatedFields = updatedFields.filter((f: any) => f.label !== 'timeline_data');
-    // Add new
-    updatedFields.push({ label: 'timeline_data', value: JSON.stringify(newTimeline) });
+
+    // Merge new stageData if provided
+    if (stageData) {
+      Object.entries(stageData).forEach(([key, value]) => {
+        // Check if field already exists to update it, or add new
+        const existingIndex = updatedFields.findIndex((f: any) => f.label === key);
+        if (existingIndex >= 0) {
+          updatedFields[existingIndex].value = value;
+        } else {
+          updatedFields.push({ label: key, value });
+        }
+      });
+    }
+
+
 
     await supabase.from('processes').update({
       status,
@@ -169,8 +135,8 @@ export const dataService = {
       await notificationService.createNotification(
         currentProc.client_id,
         'Atualização de Status',
-        `Seu processo mudou para: ${statusMap[status] || status}`,
-        status === 'rejected' ? 'error' : status === 'approved' ? 'success' : 'info'
+        `Seu processo mudou para: ${status}`,
+        status === 'rejected' ? 'error' : status === 'contract_signing' ? 'success' : 'info'
       );
     }
   },
@@ -246,19 +212,68 @@ export const dataService = {
   async getMetrics(): Promise<KPIMetrics> {
     const { data } = await supabase.from('processes').select('status');
 
-    if (!data) return { total: 0, analysis: 0, approved: 0, rejected: 0, monthly_volume: [] };
+    if (!data) return {
+      total: 0,
+      credit_analysis: 0,
+      valuation: 0,
+      legal_analysis: 0,
+      itbi_emission: 0,
+      contract_signing: 0,
+      pending: 0,
+      monthly_volume: []
+    };
 
     const total = data.length;
-    const analysis = data.filter(p => p.status === 'analysis').length;
-    const approved = data.filter(p => p.status === 'approved').length;
-    const rejected = data.filter(p => p.status === 'rejected').length;
+
+    const count = (s: string) => data.filter(p => p.status === s).length;
 
     return {
-      total, analysis, approved, rejected,
+      total,
+      credit_analysis: count('credit_analysis') + count('analysis'), // Include legacy
+      valuation: count('valuation') + count('approved'), // Include legacy
+      legal_analysis: count('legal_analysis'),
+      itbi_emission: count('itbi_emission'),
+      contract_signing: count('contract_signing') + count('contract'), // Include legacy
+      pending: count('pending_client') + count('pending_internal') + count('pending_docs'),
       monthly_volume: [
-        // Mock simples para gráfico
         { name: 'Jan', value: 12 }, { name: 'Fev', value: 19 }, { name: 'Mar', value: 30 }
       ]
     };
+  },
+
+  // --- MIGRATION UTILS ---
+
+  async migrateLegacyProcesses() {
+    const { data: processes, error } = await supabase.from('processes').select('*');
+
+    if (error) {
+      console.error('Erro ao buscar processos para migração:', error);
+      return { success: false, message: 'Erro ao buscar processos.' };
+    }
+
+    let updatedCount = 0;
+    const updates = [];
+
+    for (const p of processes) {
+      let newStatus = '';
+
+      // Mapeamento de migração
+      if (p.status === 'analysis') newStatus = 'credit_analysis'; // 20%
+      else if (p.status === 'approved') newStatus = 'valuation';  // 40% (Assumindo que aprovado vai para avaliação)
+      else if (p.status === 'contract') newStatus = 'contract_signing'; // 100%
+
+      if (newStatus) {
+        updates.push(
+          supabase.from('processes').update({ status: newStatus }).eq('id', p.id)
+        );
+        updatedCount++;
+      }
+    }
+
+    if (updates.length > 0) {
+      await Promise.all(updates);
+    }
+
+    return { success: true, message: `${updatedCount} processos migrados com sucesso.` };
   }
 };
