@@ -15,14 +15,14 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const initAuth = async () => {
-        try {
-            const currentUser = await authService.getCurrentUser();
-            setUser(currentUser);
-        } catch (e) {
-            console.error("Auth init error", e);
-        } finally {
-            setLoading(false);
-        }
+      try {
+        const currentUser = await authService.getCurrentUser();
+        setUser(currentUser);
+      } catch (e) {
+        console.error("Auth init error", e);
+      } finally {
+        setLoading(false);
+      }
     };
     initAuth();
   }, []);
@@ -50,7 +50,7 @@ const App: React.FC = () => {
   // Route helper to determine dashboard based on role
   const DashboardRouter = () => {
     if (!user) return <Navigate to="/login" />;
-    
+
     switch (user.role) {
       case 'admin':
         return <AdminDashboard />;
@@ -72,26 +72,70 @@ const App: React.FC = () => {
   return (
     <HashRouter>
       <Routes>
-        <Route 
-          path="/login" 
-          element={!user ? <Login onLoginSuccess={handleLogin} /> : <Navigate to="/" />} 
+        <Route
+          path="/login"
+          element={!user ? <Login onLoginSuccess={handleLogin} /> : <Navigate to="/" />}
         />
-        
-        <Route 
-          path="/" 
+
+        {/* Root Redirect Logic */}
+        <Route
+          path="/"
           element={
             user ? (
-              <Layout user={user} onLogout={handleLogout}>
-                <DashboardRouter />
-              </Layout>
+              user.role === 'admin' ? <Navigate to="/admin" /> :
+                user.role === 'attendant' ? <Navigate to="/attendant" /> :
+                  <Navigate to="/client" />
             ) : (
               <Navigate to="/login" />
             )
-          } 
+          }
         />
 
-        <Route 
-          path="/settings" 
+        {/* Explicit Routes */}
+        <Route
+          path="/admin"
+          element={
+            user && user.role === 'admin' ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <AdminDashboard />
+              </Layout>
+            ) : (
+              <Navigate to="/" />
+            )
+          }
+        />
+
+        <Route
+          path="/attendant"
+          element={
+            user && user.role === 'attendant' ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <AttendantDashboard />
+              </Layout>
+            ) : (
+              <Navigate to="/" />
+            )
+          }
+        />
+
+        <Route
+          path="/client"
+          element={
+            user && user.role === 'client' ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <ClientDashboard />
+              </Layout>
+            ) : (
+              <Navigate to="/" />
+            )
+          }
+        />
+
+        {/* Legacy/Alias Routes */}
+        <Route path="/processes" element={<Navigate to="/client" />} />
+
+        <Route
+          path="/settings"
           element={
             user ? (
               <Layout user={user} onLogout={handleLogout}>
@@ -100,7 +144,7 @@ const App: React.FC = () => {
             ) : (
               <Navigate to="/login" />
             )
-          } 
+          }
         />
       </Routes>
     </HashRouter>

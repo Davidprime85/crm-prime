@@ -303,11 +303,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
         if (!notificationModal.process) return;
 
         try {
-            // TODO: Implement actual email/SMS sending via backend
-            console.log(`Sending ${channel} notification:`, message);
-
-            // For now, just show success message
-            alert(`Notificação enviada via ${channel.toUpperCase()}!`);
+            // If chat channel, save message to process history
+            if (channel === 'chat') {
+                await notificationService.saveChatMessage(
+                    notificationModal.process.id,
+                    'admin',
+                    message
+                );
+                alert('Mensagem salva no chat do processo!');
+            } else {
+                // TODO: Implement actual email/SMS sending via backend
+                console.log(`Sending ${channel} notification:`, message);
+                alert(`Notificação enviada via ${channel.toUpperCase()}!`);
+            }
 
             // Close modal
             setNotificationModal({ isOpen: false, process: null });

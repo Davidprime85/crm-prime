@@ -1,21 +1,24 @@
 # 📋 DOCUMENTAÇÃO COMPLETA - CRM PRIME HABITAÇÃO
 
 > **Documento de Continuidade para Desenvolvimento com IA**  
-> Versão: 1.1 | Data: 01/12/2025 | Status: Frontend Atualizado (Workflow de Porcentagem)
+> Versão: 1.2 | Data: 02/12/2025 | Status: Frontend Estável e Corrigido (Lista + Kanban)
 
 ---
 
 ## 🎯 FINALIDADE DO SISTEMA
 
-O **CRM PRIME HABITAÇÃO** é um sistema de gestão de processos de financiamento habitacional desenvolvido para o Grupo Prime (Correspondente Caixa). O sistema foi atualizado para seguir um **Workflow de Porcentagem (20% a 100%)**, permitindo um acompanhamento granular e preciso de cada etapa.
+O **CRM PRIME HABITAÇÃO** é um sistema de gestão de processos de financiamento habitacional desenvolvido para o Grupo Prime (Correspondente Caixa). O sistema foi atualizado para seguir um **Workflow de Porcentagem (20% a 100%)**, permitindo um acompanhamento granular e preciso de cada etapa, agora com opções flexíveis de visualização.
 
 ### Funcionalidades Principais
 
 - **Gestão de Clientes**: Cadastro completo com campos personalizados.
 - **Workflow de Financiamento**: 6 etapas definidas (Crédito, Avaliação, Jurídico, ITBI, Contrato, Registro).
+- **Visualização Flexível**:
+  - **Kanban Board**: Visão por colunas para gestão de fluxo.
+  - **Lista (Tabela)**: Visão detalhada para busca e análise rápida.
 - **Coleta de Dados por Etapa**: Modais inteligentes que pedem informações específicas em cada transição.
 - **Notificações Automáticas**: Mensagens de WhatsApp geradas dinamicamente baseadas no status e dados do processo.
-- **Visualização Avançada**: Kanban Board com barras de progresso e Timeline visual detalhada.
+- **Chat Integrado**: Botão flutuante para comunicação rápida.
 
 ---
 
@@ -41,9 +44,10 @@ CRM PRIME HABITAÇÃO/
 │   ├── Timeline.tsx       # [ATUALIZADO] Visualização fixa de 5 etapas + Status
 │   ├── StageInputModal.tsx # [NOVO] Modais de input para transição de etapas
 │   ├── StatusBadge.tsx    # [ATUALIZADO] Badges com cores e porcentagens
-│   └── ...
+│   ├── ChatWidget.tsx     # [ATUALIZADO] Widget de chat flutuante
+│   └── Layout.tsx         # [ATUALIZADO] Sidebar responsiva e Botão de Chat posicionado
 ├── pages/
-│   ├── AdminDashboard.tsx # [ATUALIZADO] Integração com Modais e Lógica de Transição
+│   ├── AdminDashboard.tsx # [ATUALIZADO] Toggle Lista/Kanban, Busca e Lógica de Transição
 │   └── ...
 ├── services/
 │   ├── notificationService.ts # [ATUALIZADO] Gerador de mensagens WhatsApp por etapa
@@ -71,56 +75,47 @@ O sistema não usa mais status genéricos ('analysis', 'approved'). Agora segue 
 
 ---
 
-## 🔑 FUNCIONALIDADES IMPLEMENTADAS (Versão 1.1)
+## 🔑 FUNCIONALIDADES IMPLEMENTADAS (Versão 1.2)
 
-### 1. Kanban Inteligente (`KanbanBoard.tsx`) ✅
+### 1. Visualização Híbrida (AdminDashboard) ✅
+
+- **Toggle Grade/Lista**: Botões no cabeçalho permitem alternar instantaneamente entre Kanban e Tabela.
+- **Busca em Tempo Real**: Campo de busca filtra processos por nome do cliente ou tipo de financiamento.
+- **Tabela Detalhada**: Exibe colunas essenciais (Cliente, Tipo, Valor, Status, Data) quando em modo Lista.
+
+### 2. Kanban Inteligente (`KanbanBoard.tsx`) ✅
 
 - **Colunas Dinâmicas**: Renderiza colunas baseadas na constante `PROCESS_STAGES`.
 - **Barra de Progresso**: Cada card exibe uma barra visual indicando a % concluída.
-- **Indicadores de Pendência**: Na etapa Jurídico (60%), cards com pendência ganham bordas coloridas (Laranja = Cliente, Vermelho = Interna).
+- **Indicadores de Pendência**: Na etapa Jurídico (60%), cards com pendência ganham bordas coloridas.
 - **Drag-and-Drop**: Ao soltar um card, o sistema verifica a etapa de destino e abre o modal correspondente.
 
-### 2. Modais de Transição (`StageInputModal.tsx`) ✅
+### 3. Modais de Transição (`StageInputModal.tsx`) ✅
 
 - **Intercepção de Movimento**: O card não muda de status imediatamente. Um modal abre pedindo dados.
-- **Formulários Contextuais**:
-  - *Indo para Avaliação?* Pede valor do laudo.
-  - *Indo para Jurídico?* Pede se há pendência.
-  - *Indo para ITBI?* Pede valor e boleto.
+- **Formulários Contextuais**: Pede valor do laudo, pendências ou boletos dependendo da etapa.
 - **Persistência**: Dados são salvos em `extra_fields` no JSON do processo.
 
-### 3. Timeline Visual (`Timeline.tsx`) ✅
+### 4. Correções de Navegação e Layout ✅
+
+- **Sidebar**: Navegação corrigida para Admin (`/?tab=processes`) e Cliente (`/processes`).
+- **Logo**: Reduzida para `w-28` para melhor estética.
+- **Chat Flutuante**: Reposicionado (`bottom-24`) para evitar sobreposição com botões de suporte (WhatsApp) em mobile.
+
+### 5. Timeline Visual (`Timeline.tsx`) ✅
 
 - **5 Etapas Fixas**: Sempre mostra o caminho completo (20% -> 100%).
-- **Status Visual**:
-  - ✅ **Concluído**: Verde, com data de conclusão.
-  - 🔵 **Atual**: Azul pulsante, com barra de progresso animada.
-  - ⚪ **Futuro**: Cinza desabilitado.
-- **Header de Progresso**: Mostra % total e estatísticas.
-
-### 4. Notificações WhatsApp (`notificationService.ts`) ✅
-
-- **Geração Automática**: Função `generateStepMessage(process)` cria o texto.
-- **Lógica Condicional**:
-  - *Crédito*: "Parabéns, crédito aprovado!"
-  - *Avaliação*: "Laudo pronto: R$ [valor]"
-  - *Jurídico (Cliente)*: "Temos pendência: [descrição]"
-  - *Jurídico (Interna)*: **Sem notificação** (Botão oculto no Dashboard).
-  - *ITBI*: "Boleto disponível."
+- **Status Visual**: Concluído (Verde), Atual (Azul pulsante), Futuro (Cinza).
 
 ---
 
 ## 🚀 PRÓXIMOS PASSOS
 
-### Imediatos (Backend & Dados)
+### Imediatos (Estabilização)
 
-1. **Atualizar `dataService.ts`**:
-    - Garantir que `updateProcessStatus` aceite e faça merge correto dos novos `extra_fields` vindos do modal.
-    - Implementar lógica de servidor (ou Edge Function) para segurança extra, se necessário.
-2. **Migração de Dados**:
-    - Criar script para converter processos antigos (status 'analysis', 'approved') para o novo formato de porcentagem.
-3. **Testes End-to-End**:
-    - Simular um processo completo do início ao fim (20% -> 100%) verificando salvamento de dados e notificações.
+1. **Monitoramento de Deploy**: Verificar logs do Vercel para garantir zero erros de build.
+2. **Testes de Usuário**: Validar o fluxo completo de 20% a 100% com dados reais.
+3. **Refinamento Mobile**: Ajustar responsividade de tabelas complexas se necessário.
 
 ### Futuros (Roadmap Original)
 
@@ -133,20 +128,19 @@ O sistema não usa mais status genéricos ('analysis', 'approved'). Agora segue 
 ## 🤖 PROMPT PARA CONTINUIDADE
 
 ```
-Você está assumindo o CRM PRIME HABITAÇÃO na versão 1.1.
-O Frontend já foi totalmente adaptado para o fluxo de porcentagem (20-100%).
+Você está assumindo o CRM PRIME HABITAÇÃO na versão 1.2.
+O Frontend está ESTÁVEL, com correções visuais aplicadas e novas visualizações (Lista/Kanban).
 
 ESTADO ATUAL:
-- Kanban, Timeline e Modais de Input estão PRONTOS e integrados no AdminDashboard.
-- notificationService gera mensagens dinâmicas de WhatsApp.
-- types.ts reflete a nova estrutura de dados.
+- AdminDashboard suporta alternância entre Lista e Kanban.
+- Navegação e Layout foram corrigidos e polidos.
+- Modais de Input e Timeline estão integrados.
 
 TAREFA IMEDIATA:
-- Focar no BACKEND (dataService.ts) e MIGRAÇÃO DE DADOS.
-- Verificar se a persistência dos 'extra_fields' coletados nos modais está robusta.
-- Criar scripts para migrar processos legados para os novos status.
+- Focar na ESTABILIDADE e TESTES.
+- Se solicitado, iniciar a integração com BACKEND (dataService.ts) para persistência real (Supabase/Firestore).
+- Manter a consistência visual (Tailwind) em novas implementações.
 
 OBSERVAÇÃO:
-- O sistema usa Supabase.
-- Timeline e dados de etapas são salvos em JSONB (extra_fields).
+- O código do AdminDashboard foi refatorado para corrigir erros de sintaxe JSX. Mantenha a estrutura limpa.
 ```

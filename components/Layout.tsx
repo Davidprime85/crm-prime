@@ -98,9 +98,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
           <button
             onClick={() => {
               if (user.role === 'admin') {
-                navigate('/?tab=processes');
+                navigate('/admin');
               } else if (user.role === 'client') {
-                navigate('/processes');
+                navigate('/client');
+              } else if (user.role === 'attendant') {
+                navigate('/attendant');
               } else {
                 navigate('/');
               }

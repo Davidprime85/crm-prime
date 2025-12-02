@@ -94,5 +94,25 @@ export const notificationService = {
     const fullPhone = cleanPhone.length <= 11 ? `55${cleanPhone}` : cleanPhone;
     const encodedMessage = encodeURIComponent(message);
     return `https://wa.me/${fullPhone}?text=${encodedMessage}`;
+  },
+
+  // Salvar mensagem no histórico do chat (Persistência na tabela messages)
+  saveChatMessage: async (processId: string, sender: 'admin' | 'client' | 'system', message: string) => {
+    try {
+      // Inserir mensagem na tabela messages (compatível com ChatWidget)
+      await supabase
+        .from('messages')
+        .insert({
+          process_id: processId,
+          sender_id: sender, // 'admin', 'client', ou 'system'
+          sender_name: sender === 'admin' ? 'Administrador' : sender === 'client' ? 'Cliente' : 'Sistema',
+          role: sender,
+          content: message
+        });
+
+      console.log('Mensagem salva com sucesso no chat do processo:', processId);
+    } catch (e) {
+      console.error('Erro crítico ao salvar mensagem de chat:', e);
+    }
   }
 };
