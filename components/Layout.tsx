@@ -95,23 +95,16 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
             <span className="font-medium">Dashboard</span>
           </button>
 
-          <button
-            onClick={() => {
-              if (user.role === 'admin') {
-                navigate('/admin');
-              } else if (user.role === 'client') {
-                navigate('/client');
-              } else if (user.role === 'attendant') {
-                navigate('/attendant');
-              } else {
-                navigate('/');
-              }
-            }}
-            className="w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white rounded-lg transition-colors"
-          >
-            <FileText size={20} />
-            <span className="font-medium">Processos</span>
-          </button>
+          {/* Botão Processos apenas para Cliente */}
+          {user.role === 'client' && (
+            <button
+              onClick={() => navigate('/client')}
+              className="w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white rounded-lg transition-colors"
+            >
+              <FileText size={20} />
+              <span className="font-medium">Processos</span>
+            </button>
+          )}
 
           <a
             href="https://www8.caixa.gov.br/siopiinternet-web/simulaOperacaoInternet.do?method=inicializarCasoUso"

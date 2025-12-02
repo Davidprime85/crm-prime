@@ -199,13 +199,15 @@ export const AttendantDashboard: React.FC = () => {
               </div>
 
               <div className="space-y-3 text-sm">
-                {selectedProcess.extra_fields?.map((field, idx) => (
-                  <div key={idx}>
-                    <p className="text-slate-400 text-xs">{field.label}</p>
-                    <p className="font-medium">{field.value}</p>
-                  </div>
-                ))}
-                {(!selectedProcess.extra_fields || selectedProcess.extra_fields.length === 0) && !isAddingField && (
+                {selectedProcess.extra_fields
+                  ?.filter(field => !['timeline_data', 'chat_history'].includes(field.label))
+                  .map((field, idx) => (
+                    <div key={idx}>
+                      <p className="text-slate-400 text-xs">{field.label}</p>
+                      <p className="font-medium">{field.value}</p>
+                    </div>
+                  ))}
+                {(!selectedProcess.extra_fields || selectedProcess.extra_fields.filter(f => !['timeline_data', 'chat_history'].includes(f.label)).length === 0) && !isAddingField && (
                   <p className="text-slate-400 text-xs italic">Nenhuma informação extra.</p>
                 )}
               </div>
