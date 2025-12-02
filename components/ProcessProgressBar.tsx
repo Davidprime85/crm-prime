@@ -14,8 +14,7 @@ const STATUS_TO_PERCENTAGE: Record<ProcessStatus, number> = {
     'legal_analysis': 60,
     'itbi_emission': 80,
     'contract_signing': 100,
-    'registry_service': 100,
-    'pending': 0
+    'registry_service': 100
 };
 
 // Definição das etapas visuais
