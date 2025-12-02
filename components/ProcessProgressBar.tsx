@@ -12,6 +12,8 @@ const STATUS_TO_PERCENTAGE: Record<ProcessStatus, number> = {
     'credit_analysis': 20,
     'valuation': 40,
     'legal_analysis': 60,
+    'pending_client': 60,
+    'pending_internal': 60,
     'itbi_emission': 80,
     'contract_signing': 100,
     'registry_service': 100
