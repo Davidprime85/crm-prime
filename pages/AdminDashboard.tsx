@@ -266,25 +266,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
                     <StatCard
                         title="Total de Processos"
                         value={processes.length.toString()}
-                        icon={<Briefcase className="text-blue-500" />}
+                        icon={Briefcase}
                         trend="+12% este mês"
                     />
                     <StatCard
                         title="Volume em Carteira"
                         value={`R$ ${(totalValue / 1000000).toFixed(1)}M`}
-                        icon={<BarChartIcon className="text-green-500" />}
+                        icon={BarChartIcon}
                         trend="VGV Total"
                     />
                     <StatCard
                         title="Processos Ativos"
                         value={activeProcesses.toString()}
-                        icon={<Activity className="text-purple-500" />}
+                        icon={Activity}
                         trend="Em andamento"
                     />
                     <StatCard
                         title="Taxa de Conversão"
                         value="68%"
-                        icon={<CheckCircle className="text-teal-500" />}
+                        icon={CheckCircle}
                         trend="Últimos 30 dias"
                     />
                 </div>
