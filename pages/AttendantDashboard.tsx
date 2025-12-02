@@ -1,57 +1,64 @@
 import React, { useState, useEffect } from 'react';
 import { StatusBadge } from '../components/StatusBadge';
-import { Search, Filter, Plus, Clock, ChevronLeft, Loader2 } from 'lucide-react';
-import { ProcessStatus, Process } from '../types';
 import { DocumentList } from '../components/DocumentList';
 import { ChatWidget } from '../components/ChatWidget';
+import { KanbanBoard } from '../components/KanbanBoard';
+import { StageInputModal } from '../components/StageInputModal';
+import { NotificationSelector } from '../components/NotificationSelector';
+import { notificationService } from '../services/notificationService';
 import { dataService } from '../services/dataService';
 import { authService } from '../services/authService';
+import {
+  Search, Filter, Loader2, LayoutGrid, List
+} from 'lucide-react';
+import { Process, ProcessStatus } from '../types';
 
 export const AttendantDashboard: React.FC = () => {
   const [processes, setProcesses] = useState<Process[]>([]);
   const [loading, setLoading] = useState(true);
-
   const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null);
-  const [filterStatus, setFilterStatus] = useState<ProcessStatus | 'all'>('all');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+  const [searchTerm, setSearchTerm] = useState('');
 
-  // New Process Modal State
-  const [isNewProcessModalOpen, setIsNewProcessModalOpen] = useState(false);
-  const [newProcessData, setNewProcessData] = useState({
-    client_name: '',
-    client_email: '',
-    client_cpf: '',
-    value: '',
-    type: 'Minha Casa Minha Vida'
+  // Stage Input Modal State
+  const [stageModal, setStageModal] = useState<{
+    isOpen: boolean;
+    processId: string;
+    targetStage: ProcessStatus;
+  }>({
+    isOpen: false,
+    processId: '',
+    targetStage: 'credit_analysis'
   });
 
-  // Extra Fields State
-  const [newFieldName, setNewFieldName] = useState('');
-  const [newFieldValue, setNewFieldValue] = useState('');
-  const [isAddingField, setIsAddingField] = useState(false);
+  // Notification Selector State
+  const [notificationModal, setNotificationModal] = useState<{
+    isOpen: boolean;
+    process: Process | null;
+  }>({
+    isOpen: false,
+    process: null
+  });
 
   useEffect(() => {
-    const load = async () => {
-      const user = await authService.getCurrentUser();
-      if (user) {
-        const data = await dataService.getProcesses('attendant', user.id);
-        setProcesses(data);
-      }
-      setLoading(false);
-    };
-    load();
+    loadData();
   }, []);
+
+  const loadData = async () => {
+    const user = await authService.getCurrentUser();
+    if (user) {
+      const data = await dataService.getProcesses('attendant', user.id);
+      setProcesses(data);
+    }
+    setLoading(false);
+  };
 
   const selectedProcess = processes.find(p => p.id === selectedProcessId);
 
-  const filteredProcesses = filterStatus === 'all'
-    ? processes
-    : processes.filter(p => p.status === filterStatus);
-
-  // Handler for Document Updates
   const handleDocumentUpdate = async (docId: string, newStatus: 'uploaded' | 'approved' | 'rejected', url?: string, feedback?: string) => {
     if (!selectedProcessId) return;
 
-    // Optimistic UI
     setProcesses(prev => prev.map(proc => {
       if (proc.id === selectedProcessId) {
         return {
@@ -62,7 +69,6 @@ export const AttendantDashboard: React.FC = () => {
       return proc;
     }));
 
-    // Real Update
     try {
       await dataService.updateDocument(docId, { status: newStatus, url, feedback });
     } catch (e) {
@@ -74,67 +80,58 @@ export const AttendantDashboard: React.FC = () => {
     if (!selectedProcessId) return;
     try {
       await dataService.addDocument(selectedProcessId, docName);
-      // Reload needed to get the new ID
-      const user = await authService.getCurrentUser();
-      if (user) {
-        const data = await dataService.getProcesses('attendant', user.id);
-        setProcesses(data);
-      }
+      loadData();
     } catch (e) {
       alert("Erro ao adicionar documento.");
     }
   };
 
-  const handleCreateProcess = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleStageTransition = async (data: Record<string, string>) => {
+    const { processId, targetStage } = stageModal;
+
     try {
-      const id = Math.floor(Math.random() * 10000).toString(); // Temp ID gen
-      await dataService.createProcess({
-        id,
-        client_name: newProcessData.client_name,
-        client_email: newProcessData.client_email,
-        client_cpf: newProcessData.client_cpf,
-        value: parseFloat(newProcessData.value),
-        type: newProcessData.type,
-        client_id: 'temp_' + Date.now(), // Will be linked later or by email
-        documents: [
-          { id: 'doc1', name: 'RG e CPF', status: 'pending' },
-          { id: 'doc2', name: 'Comprovante de Renda', status: 'pending' },
-          { id: 'doc3', name: 'Comprovante de Residência', status: 'pending' }
-        ]
-      });
+      const updated = processes.map(p =>
+        p.id === processId ? { ...p, status: targetStage } : p
+      );
+      setProcesses(updated);
 
-      setIsNewProcessModalOpen(false);
-      setNewProcessData({ client_name: '', client_email: '', client_cpf: '', value: '', type: 'Minha Casa Minha Vida' });
-
-      // Reload
-      const user = await authService.getCurrentUser();
-      if (user) {
-        const data = await dataService.getProcesses('attendant', user.id);
-        setProcesses(data);
+      const process = processes.find(p => p.id === processId);
+      if (process) {
+        await dataService.updateProcessStatus(processId, targetStage, data);
       }
-      alert('Processo criado com sucesso!');
+
+      setStageModal({ isOpen: false, processId: '', targetStage: 'credit_analysis' });
+      loadData();
+
+      const updatedProcess = processes.find(p => p.id === processId);
+      if (updatedProcess) {
+        setNotificationModal({ isOpen: true, process: { ...updatedProcess, status: targetStage } });
+      }
     } catch (e) {
-      alert('Erro ao criar processo.');
+      alert('Erro ao mover processo.');
+      loadData();
     }
   };
 
-  const handleAddExtraField = async () => {
-    if (!selectedProcessId || !selectedProcess) return;
-    if (!newFieldName || !newFieldValue) return;
-
-    const updatedFields = [...(selectedProcess.extra_fields || []), { label: newFieldName, value: newFieldValue }];
-
-    // Optimistic
-    setProcesses(prev => prev.map(p => p.id === selectedProcessId ? { ...p, extra_fields: updatedFields } : p));
+  const handleNotificationSend = async (channel: 'email' | 'sms' | 'chat', message: string) => {
+    if (!notificationModal.process) return;
 
     try {
-      await dataService.updateProcessFields(selectedProcessId, updatedFields);
-      setNewFieldName('');
-      setNewFieldValue('');
-      setIsAddingField(false);
+      if (channel === 'chat') {
+        await notificationService.saveChatMessage(
+          notificationModal.process.id,
+          'admin',
+          message
+        );
+        alert('Mensagem salva no chat do processo!');
+      } else {
+        console.log(`Sending ${channel} notification:`, message);
+        alert(`Notificação enviada via ${channel.toUpperCase()}!`);
+      }
+
+      setNotificationModal({ isOpen: false, process: null });
     } catch (e) {
-      alert('Erro ao adicionar campo.');
+      alert('Erro ao enviar notificação.');
     }
   };
 
@@ -145,240 +142,210 @@ export const AttendantDashboard: React.FC = () => {
       <div className="space-y-6">
         <button
           onClick={() => setSelectedProcessId(null)}
-          className="flex items-center text-slate-500 hover:text-slate-800 mb-4"
+          className="text-slate-500 hover:text-slate-800 mb-4"
         >
-          <ChevronLeft size={20} /> Voltar para lista
+          ← Voltar para lista
         </button>
-
-        <div className="flex justify-between items-start">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900">{selectedProcess.client_name}</h2>
-            <p className="text-slate-500">Processo #{selectedProcess.id} • {selectedProcess.type}</p>
-          </div>
-          <StatusBadge status={selectedProcess.status} />
-        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            <DocumentList
-              processId={selectedProcess.id}
-              documents={selectedProcess.documents}
-              userRole="attendant"
-              onDocumentUpdate={handleDocumentUpdate}
-              onAddDocument={handleAddDocument}
-            />
-          </div>
-          <div>
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-              <h3 className="font-bold text-slate-900 mb-4">Dados do Cliente</h3>
-              <div className="space-y-3 text-sm">
+              <div className="flex justify-between items-start mb-4">
                 <div>
-                  <p className="text-slate-400 text-xs">Email</p>
-                  <p className="font-medium">{selectedProcess.client_email || '-'}</p>
+                  <h2 className="text-xl font-bold text-slate-900">{selectedProcess.client_name}</h2>
+                  <p className="text-slate-500">{selectedProcess.type}</p>
                 </div>
+                <StatusBadge status={selectedProcess.status} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
-                  <p className="text-slate-400 text-xs">CPF</p>
-                  <p className="font-medium">{selectedProcess.client_cpf || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 text-xs">Valor Imóvel</p>
+                  <p className="text-xs text-slate-500 uppercase">Valor do Imóvel</p>
                   <p className="font-medium">R$ {selectedProcess.value.toLocaleString()}</p>
                 </div>
-              </div>
-            </div>
-
-            {/* Extra Fields Section */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 mt-6">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-slate-900">Informações Adicionais</h3>
-                {!isAddingField && (
-                  <button onClick={() => setIsAddingField(true)} className="text-xs text-amber-600 hover:text-amber-700 font-medium flex items-center gap-1">
-                    <Plus size={12} /> Adicionar
-                  </button>
-                )}
-              </div>
-
-              <div className="space-y-3 text-sm">
+                <div>
+                  <p className="text-xs text-slate-500 uppercase">Data de Entrada</p>
+                  <p className="font-medium">{new Date(selectedProcess.created_at).toLocaleDateString()}</p>
+                </div>
                 {selectedProcess.extra_fields
                   ?.filter(field => !['timeline_data', 'chat_history'].includes(field.label))
                   .map((field, idx) => (
                     <div key={idx}>
-                      <p className="text-slate-400 text-xs">{field.label}</p>
+                      <p className="text-xs text-slate-500 uppercase">{field.label}</p>
                       <p className="font-medium">{field.value}</p>
                     </div>
                   ))}
-                {(!selectedProcess.extra_fields || selectedProcess.extra_fields.filter(f => !['timeline_data', 'chat_history'].includes(f.label)).length === 0) && !isAddingField && (
-                  <p className="text-slate-400 text-xs italic">Nenhuma informação extra.</p>
-                )}
               </div>
 
-              {isAddingField && (
-                <div className="mt-4 bg-slate-50 p-3 rounded border border-slate-200 animate-in fade-in">
-                  <div className="space-y-2">
-                    <input
-                      type="text"
-                      placeholder="Nome do Campo (ex: Profissão)"
-                      className="w-full text-xs p-2 border rounded"
-                      value={newFieldName}
-                      onChange={e => setNewFieldName(e.target.value)}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Valor (ex: Autônomo)"
-                      className="w-full text-xs p-2 border rounded"
-                      value={newFieldValue}
-                      onChange={e => setNewFieldValue(e.target.value)}
-                    />
-                    <div className="flex justify-end gap-2 mt-2">
-                      <button onClick={() => setIsAddingField(false)} className="text-xs text-slate-500">Cancelar</button>
-                      <button onClick={handleAddExtraField} className="text-xs bg-slate-900 text-white px-3 py-1 rounded">Salvar</button>
-                    </div>
-                  </div>
+              <DocumentList
+                processId={selectedProcess.id}
+                documents={selectedProcess.documents}
+                userRole="attendant"
+                onDocumentUpdate={handleDocumentUpdate}
+                onAddDocument={handleAddDocument}
+              />
+            </div>
+          </div>
+
+          <div>
+            <div className="bg-slate-50 p-4 rounded-lg">
+              <h3 className="font-bold text-slate-900 mb-2">Chat Interno</h3>
+              <p className="text-xs text-slate-500 mb-4">Comunicação direta com o cliente.</p>
+              <ChatWidget
+                processId={selectedProcess.id}
+                currentUser={{ id: '2', name: 'Atendente', role: 'attendant', email: '' }}
+                recipientName={selectedProcess.client_name}
+              />
+
+              {selectedProcess.client_email && (
+                <div className="mt-4 pt-4 border-t border-slate-100">
+                  <button
+                    onClick={() => setNotificationModal({ isOpen: true, process: selectedProcess })}
+                    className="block w-full text-center bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-bold hover:from-blue-700 hover:to-purple-700 shadow-lg transition-all"
+                  >
+                    📧 Notificar Cliente
+                  </button>
                 </div>
               )}
             </div>
           </div>
         </div>
-
-        <ChatWidget
-          processId={selectedProcess.id}
-          currentUser={{ id: '2', name: 'Ana', role: 'attendant', email: '' }}
-          recipientName={selectedProcess.client_name}
-        />
-      </div >
+      </div>
     );
   }
 
+  const filteredProcesses = processes.filter(p => {
+    const matchesStatus = filterStatus === 'all' || p.status === filterStatus;
+    const matchesSearch = searchTerm === '' ||
+      p.client_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.type.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesStatus && matchesSearch;
+  });
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900">Meus Atendimentos</h2>
-          <p className="text-slate-500">Gerencie os processos sob sua responsabilidade.</p>
-        </div>
-
-        {/* Desktop Button */}
-        <button
-          onClick={() => setIsNewProcessModalOpen(true)}
-          className="hidden md:flex bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg items-center gap-2 transition-colors shadow-lg shadow-amber-500/20"
-        >
-          <Plus size={20} /> Novo Atendimento
-        </button>
-      </div>
-
-      {/* Mobile Floating Button */}
-      <button
-        onClick={() => setIsNewProcessModalOpen(true)}
-        className="md:hidden fixed bottom-6 right-6 z-50 bg-amber-500 text-white w-14 h-14 rounded-full shadow-xl flex items-center justify-center"
-      >
-        <Plus size={24} />
-      </button>
-
-      {/* New Process Modal */}
-      {isNewProcessModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <h3 className="font-bold text-slate-800">Novo Atendimento</h3>
-              <button onClick={() => setIsNewProcessModalOpen(false)} className="text-slate-400 hover:text-slate-600"><ChevronLeft className="rotate-180" size={20} /></button>
-            </div>
-            <form onSubmit={handleCreateProcess} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Nome do Cliente</label>
-                <input required type="text" className="w-full border rounded-lg p-2" value={newProcessData.client_name} onChange={e => setNewProcessData({ ...newProcessData, client_name: e.target.value })} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-                <input required type="email" className="w-full border rounded-lg p-2" value={newProcessData.client_email} onChange={e => setNewProcessData({ ...newProcessData, client_email: e.target.value })} />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">CPF</label>
-                  <input required type="text" className="w-full border rounded-lg p-2" value={newProcessData.client_cpf} onChange={e => setNewProcessData({ ...newProcessData, client_cpf: e.target.value })} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Valor Imóvel</label>
-                  <input required type="number" className="w-full border rounded-lg p-2" value={newProcessData.value} onChange={e => setNewProcessData({ ...newProcessData, value: e.target.value })} />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Financiamento</label>
-                <select className="w-full border rounded-lg p-2" value={newProcessData.type} onChange={e => setNewProcessData({ ...newProcessData, type: e.target.value })}>
-                  <option>Minha Casa Minha Vida</option>
-                  <option>SBPE</option>
-                  <option>Pró-Cotista</option>
-                </select>
-              </div>
-              <button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 rounded-lg mt-4">
-                Criar Processo
-              </button>
-            </form>
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-slate-800">Meus Atendimentos</h2>
+        <div className="flex gap-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+            <input
+              type="text"
+              placeholder="Buscar cliente..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+            />
+          </div>
+          <button className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50">
+            <Filter size={20} /> Filtros
+          </button>
+          <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+            <button
+              onClick={() => setViewMode('kanban')}
+              className={`p-2 rounded-md transition-all ${viewMode === 'kanban' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
+              title="Visualização em Grade (Kanban)"
+            >
+              <LayoutGrid size={20} />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
+              title="Visualização em Lista"
+            >
+              <List size={20} />
+            </button>
           </div>
         </div>
-      )}
+      </div>
 
-      <div className="flex flex-wrap items-center gap-2 pb-2">
+      <div className="flex gap-2 mb-4">
         <button
           onClick={() => setFilterStatus('all')}
-          className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${filterStatus === 'all' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300'}`}
+          className={`px-4 py-2 rounded-full text-sm font-bold ${filterStatus === 'all' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}
         >
           Todos
         </button>
-        <button
-          onClick={() => setFilterStatus('credit_analysis')}
-          className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${filterStatus === 'credit_analysis' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:border-blue-200'}`}
-        >
-          Em Análise
-        </button>
-        <button
-          onClick={() => setFilterStatus('legal_analysis')}
-          className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${filterStatus === 'legal_analysis' ? 'bg-amber-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:border-amber-200'}`}
-        >
-          Pendências
-        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredProcesses.map((process) => (
-          <div
-            key={process.id}
-            onClick={() => setSelectedProcessId(process.id)}
-            className="bg-white rounded-xl p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow cursor-pointer group"
-          >
-            <div className="flex justify-between items-start mb-4">
-              <div className="p-2 bg-slate-100 rounded-lg text-slate-600 group-hover:bg-amber-50 group-hover:text-amber-600 transition-colors">
-                <Clock size={20} />
-              </div>
-              <StatusBadge status={process.status} />
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="animate-spin text-slate-400" size={32} />
+        </div>
+      ) : viewMode === 'kanban' ? (
+        <KanbanBoard
+          processes={filteredProcesses}
+          onProcessMove={(id, status) => {
+            setStageModal({
+              isOpen: true,
+              processId: id,
+              targetStage: status
+            });
+          }}
+          onProcessSelect={setSelectedProcessId}
+        />
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100 text-xs uppercase text-slate-500 font-semibold">
+                <th className="p-4">Cliente</th>
+                <th className="p-4">Tipo</th>
+                <th className="p-4">Valor</th>
+                <th className="p-4">Status</th>
+                <th className="p-4">Atualizado em</th>
+                <th className="p-4 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {filteredProcesses.map((process) => (
+                <tr
+                  key={process.id}
+                  onClick={() => setSelectedProcessId(process.id)}
+                  className="hover:bg-slate-50 cursor-pointer transition-colors group"
+                >
+                  <td className="p-4 font-medium text-slate-900">{process.client_name}</td>
+                  <td className="p-4 text-slate-600">{process.type}</td>
+                  <td className="p-4 text-slate-600">R$ {process.value.toLocaleString()}</td>
+                  <td className="p-4">
+                    <StatusBadge status={process.status} />
+                  </td>
+                  <td className="p-4 text-slate-500 text-sm">
+                    {new Date(process.updated_at).toLocaleDateString()}
+                  </td>
+                  <td className="p-4 text-right">
+                    <span className="text-slate-400 group-hover:text-blue-600 transition-colors text-sm font-medium">
+                      Ver Detalhes →
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filteredProcesses.length === 0 && (
+            <div className="p-8 text-center text-slate-400 italic">
+              Nenhum processo encontrado.
             </div>
+          )}
+        </div>
+      )}
 
-            <h3 className="text-lg font-bold text-slate-900 mb-1">{process.client_name}</h3>
-            <p className="text-sm text-slate-500 mb-4">{process.type}</p>
+      {/* Stage Input Modal */}
+      <StageInputModal
+        isOpen={stageModal.isOpen}
+        stage={stageModal.targetStage}
+        onClose={() => setStageModal({ isOpen: false, processId: '', targetStage: 'credit_analysis' })}
+        onSubmit={handleStageTransition}
+      />
 
-            <div className="space-y-2 mb-6">
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-400">Valor:</span>
-                <span className="font-medium text-slate-700">R$ {process.value.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-400">ID:</span>
-                <span className="font-mono text-slate-700">{process.id}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-400">Atualizado:</span>
-                <span className="text-slate-700">{new Date(process.updated_at).toLocaleDateString()}</span>
-              </div>
-            </div>
-
-            <div className="pt-4 border-t border-slate-50 flex justify-between items-center">
-              <span className="text-xs font-medium text-slate-400">
-                Ver Detalhes
-              </span>
-              <span className="text-slate-400 group-hover:translate-x-1 transition-transform">&rarr;</span>
-            </div>
-          </div>
-        ))}
-      </div>
+      {/* Notification Selector Modal */}
+      {notificationModal.process && (
+        <NotificationSelector
+          process={notificationModal.process}
+          onClose={() => setNotificationModal({ isOpen: false, process: null })}
+          onSend={handleNotificationSend}
+        />
+      )}
     </div>
   );
 };

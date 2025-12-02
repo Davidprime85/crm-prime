@@ -214,24 +214,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
           <div className="max-w-7xl mx-auto">
             {children}
           </div>
-
-          {/* Floating Chat Button */}
-          <button
-            onClick={() => {
-              // Scroll to chat widget if exists, or navigate to processes
-              const chatWidget = document.querySelector('[data-chat-widget]');
-              if (chatWidget) {
-                chatWidget.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-              } else if (user.role === 'client') {
-                navigate('/processes');
-              }
-            }}
-            className="fixed bottom-24 right-6 w-14 h-14 bg-gradient-to-br from-blue-600 to-purple-600 text-white rounded-full shadow-2xl hover:shadow-blue-500/50 hover:scale-110 transition-all duration-300 flex items-center justify-center z-50 group"
-            title="Chat"
-          >
-            <MessageCircle size={24} className="group-hover:scale-110 transition-transform" />
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white animate-pulse" />
-          </button>
         </main>
       </div>
     </div>
