@@ -1,10 +1,16 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, HelpCircle } from 'lucide-react';
 
+interface FAQItem {
+    question: string;
+    answer: string;
+    link?: string;
+}
+
 export const FAQSection: React.FC = () => {
     const [openIndex, setOpenIndex] = useState<number | null>(null);
 
-    const faqs = [
+    const faqs: FAQItem[] = [
         {
             question: "Posso usar meu FGTS no financiamento?",
             answer: "Sim! O FGTS pode ser utilizado como entrada, para amortizar o saldo devedor (reduzindo o prazo ou o valor da parcela) ou para pagar parte das prestações (até 80% do valor da parcela por 12 meses). É necessário se enquadrar nas regras do SFH."
@@ -24,6 +30,11 @@ export const FAQSection: React.FC = () => {
         {
             question: "Qual o prazo máximo de financiamento?",
             answer: "O prazo máximo pode chegar a até 35 anos (420 meses), dependendo da modalidade de crédito e da idade do proponente (a soma da idade + prazo não pode exceder 80 anos e 6 meses)."
+        },
+        {
+            question: "Saiba Mais",
+            answer: "Para mais dúvidas, acesse o portal oficial da Caixa.",
+            link: "https://www.caixa.gov.br/voce/habitacao/perguntas-frequentes-novos-financiamentos/Paginas/default.aspx"
         }
     ];
 
@@ -45,6 +56,16 @@ export const FAQSection: React.FC = () => {
                         {openIndex === index && (
                             <div className="p-4 bg-white text-sm text-slate-600 leading-relaxed border-t border-slate-100">
                                 {faq.answer}
+                                {faq.link && (
+                                    <a
+                                        href={faq.link}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-block mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors"
+                                    >
+                                        Acessar Portal da Caixa →
+                                    </a>
+                                )}
                             </div>
                         )}
                     </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LogOut, User as UserIcon, LayoutDashboard, FileText, Settings, Calculator, Bell, Menu, X } from 'lucide-react';
+import { LogOut, User as UserIcon, LayoutDashboard, FileText, Settings, Calculator, Bell, Menu, X, MessageCircle } from 'lucide-react';
 import { User, Notification } from '../types';
 import { notificationService } from '../services/notificationService';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -66,7 +66,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
               <img
                 src="/logo-prime-horizontal.png"
                 alt="Prime Correspondente"
-                className="w-44 h-auto object-contain bg-white rounded-lg px-3 py-2 shadow-md"
+                className="w-40 h-auto object-contain bg-white rounded-lg px-3 py-2 shadow-md"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                   const fallback = document.getElementById('logo-fallback-sidebar');
@@ -96,7 +96,15 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
           </button>
 
           <button
-            onClick={() => navigate('/?tab=processes')}
+            onClick={() => {
+              if (user.role === 'admin') {
+                navigate('/?tab=processes');
+              } else if (user.role === 'client') {
+                navigate('/processes');
+              } else {
+                navigate('/');
+              }
+            }}
             className="w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white rounded-lg transition-colors"
           >
             <FileText size={20} />
@@ -211,6 +219,24 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
           <div className="max-w-7xl mx-auto">
             {children}
           </div>
+
+          {/* Floating Chat Button */}
+          <button
+            onClick={() => {
+              // Scroll to chat widget if exists, or navigate to processes
+              const chatWidget = document.querySelector('[data-chat-widget]');
+              if (chatWidget) {
+                chatWidget.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              } else if (user.role === 'client') {
+                navigate('/processes');
+              }
+            }}
+            className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-blue-600 to-purple-600 text-white rounded-full shadow-2xl hover:shadow-blue-500/50 hover:scale-110 transition-all duration-300 flex items-center justify-center z-50 group"
+            title="Chat"
+          >
+            <MessageCircle size={24} className="group-hover:scale-110 transition-transform" />
+            <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white animate-pulse" />
+          </button>
         </main>
       </div>
     </div>
