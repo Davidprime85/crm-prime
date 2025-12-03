@@ -83,7 +83,7 @@ export const AttendantDashboard: React.FC = () => {
     }));
 
     try {
-      await firestoreService.updateDocument(docId, { status: newStatus, url, feedback });
+      await firestoreService.updateDocument(selectedProcessId, docId, { status: newStatus, url, feedback });
     } catch (e) {
       alert('Erro ao salvar alteração.');
     }
