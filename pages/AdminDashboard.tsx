@@ -131,7 +131,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
         setProcesses(updatedProcesses);
 
         try {
-            await dataService.updateDocument(docId, { status: newStatus, feedback });
+            await firestoreService.updateDocument(selectedProcessId, docId, { status: newStatus, feedback });
             if (url) {
                 // In a real app, we would upload the file here or just save the URL
             }
@@ -142,7 +142,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
                 const allApproved = currentProc.documents.every(d => d.status === 'approved');
                 // Auto-approve process if all documents are approved
                 if (allApproved && currentProc.status === 'credit_analysis') {
-                    await dataService.updateProcessStatus(selectedProcessId, 'valuation');
+                    await firestoreService.updateProcessStatus(selectedProcessId, 'valuation', {});
                     loadData(); // Refresh to show new status
                 }
             }
@@ -155,7 +155,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
     const handleAddDocument = async (docName: string) => {
         if (!selectedProcessId) return;
         try {
-            await dataService.addDocument(selectedProcessId, docName);
+            await firestoreService.addDocument(selectedProcessId, docName);
             loadData();
         } catch (e) {
             alert("Erro ao adicionar documento.");
@@ -822,8 +822,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
                     <button
                         onClick={async () => {
                             if (confirm('Tem certeza? Isso atualizará os status dos processos antigos.')) {
-                                const res = await dataService.migrateLegacyProcesses();
-                                alert(res.message);
+                                // Migração não implementada no Firestore
+                                alert('Migração de processos legados não disponível no Firestore');
                                 loadData();
                             }
                         }}

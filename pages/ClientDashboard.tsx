@@ -7,7 +7,7 @@ import { FinancingSteps } from '../components/FinancingSteps';
 import { FAQSection } from '../components/FAQSection';
 import { CheckCircle2, Circle, MessageSquare, Loader2, MessageCircle } from 'lucide-react';
 import { Process, ProcessDocument } from '../types';
-import { dataService } from '../services/dataService';
+import { firestoreService } from '../services/firestoreService';
 import { authService } from '../services/authService';
 
 export const ClientDashboard: React.FC = () => {
@@ -22,7 +22,7 @@ export const ClientDashboard: React.FC = () => {
       if (user) {
         setCurrentUser(user);
         // Passamos user.email para garantir que encontre processos criados pelo Admin usando apenas o email
-        const data = await dataService.getProcesses('client', user.id, user.email);
+        const data = await firestoreService.getProcesses('client', user.id, user.email);
         setProcesses(data);
         if (data.length > 0) setSelectedProcessId(data[0].id);
       }
@@ -48,15 +48,15 @@ export const ClientDashboard: React.FC = () => {
       return proc;
     }));
 
-    await dataService.updateDocument(docId, { status: newStatus, url: finalUrl, uploaded_at: new Date().toISOString(), feedback });
+    await firestoreService.updateDocument(selectedProcessId, docId, { status: newStatus, url: finalUrl, uploaded_at: new Date().toISOString(), feedback });
   };
 
   const handleAddDocument = async (docName: string) => {
     if (!selectedProcessId) return;
-    await dataService.addDocument(selectedProcessId, docName);
+    await firestoreService.addDocument(selectedProcessId, docName);
     // reload
     if (currentUser) {
-      const data = await dataService.getProcesses('client', currentUser.id, currentUser.email);
+      const data = await firestoreService.getProcesses('client', currentUser.id, currentUser.email);
       setProcesses(data);
     }
   };
