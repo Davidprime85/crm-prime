@@ -102,9 +102,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
     const loadData = async () => {
         setLoading(true);
         try {
-            const procs = await dataService.getProcesses('admin', '1');
+            const procs = await firestoreService.getProcesses('admin', '1');
             setProcesses(procs);
-            const mets = await dataService.getMetrics();
+            // TODO: Implementar getMetrics no firestoreService
+            const mets = { total: procs.length, credit_analysis: 0, valuation: 0, legal_analysis: 0, itbi_emission: 0, contract_signing: 0, pending: 0, monthly_volume: [] };
             setMetrics(mets);
         } catch (e) {
             console.error(e);
@@ -221,7 +222,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
                     ]
                 };
 
-                await dataService.createProcess(processData);
+                await firestoreService.createProcess(processData);
 
                 // 3. Send Welcome Email
                 await emailService.sendWelcomeEmail(newClient.email, newClient.name);
@@ -247,7 +248,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
     const handleInviteAttendant = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            await dataService.addAttendantEmail(inviteEmail);
+            await firestoreService.addAttendantEmail(inviteEmail);
             alert(`Email ${inviteEmail} autorizado! Peça para o atendente criar uma conta no site.`);
             setInviteEmail('');
         } catch (e) {
@@ -278,7 +279,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
                 ];
 
                 // Update process with new status and data
-                await dataService.updateProcessStatus(processId, targetStage, data);
+                await firestoreService.updateProcessStatus(processId, targetStage, data);
             }
 
             // Close modal
