@@ -1,4 +1,12 @@
 
+// ============================================
+// FIRESTORE COMPATIBILITY NOTES
+// ============================================
+// Os tipos abaixo são compatíveis com Firestore.
+// Timestamps: Firestore usa Timestamp objects, mas serializamos para strings ISO
+// Arrays/Objects: Nativamente suportados no Firestore
+// IDs: Gerados automaticamente pelo Firestore ou podem ser customizados
+
 export type UserRole = 'admin' | 'attendant' | 'client';
 
 export interface User {
@@ -159,18 +167,19 @@ export function getOrderedStages(): ProcessStage[] {
 
 export type DocumentStatus = 'pending' | 'uploaded' | 'approved' | 'rejected';
 
+// Firestore: ProcessDocument será armazenado como array dentro do documento Process
 export interface ProcessDocument {
   id: string;
   name: string;
   status: DocumentStatus;
   url?: string;
-  uploaded_at?: string;
+  uploaded_at?: string; // ISO string - converter de/para Firestore Timestamp
   feedback?: string;
   is_extra?: boolean;
 }
 
 
-
+// Firestore: ChatMessage será armazenado em coleção separada /messages
 export interface ChatMessage {
   id: string;
   process_id: string;
@@ -178,7 +187,7 @@ export interface ChatMessage {
   sender_name: string;
   role: UserRole;
   content: string;
-  timestamp: string;
+  timestamp: string; // ISO string - converter de/para Firestore Timestamp
 }
 
 export interface Notification {
@@ -196,6 +205,8 @@ export interface CustomField {
   value: string;
 }
 
+// Firestore: Process será armazenado em coleção /processes
+// Subcoleções possíveis: /processes/{id}/documents, /processes/{id}/messages
 export interface Process {
   id: string;
   client_name: string;
@@ -205,13 +216,13 @@ export interface Process {
   type: string;
   status: ProcessStatus;
   value: number;
-  updated_at: string;
-  created_at: string;
+  updated_at: string; // ISO string - converter de/para Firestore Timestamp
+  created_at: string; // ISO string - converter de/para Firestore Timestamp
   attendant_id?: string;
 
-  documents: ProcessDocument[];
-  messages?: ChatMessage[];
-  extra_fields?: CustomField[];
+  documents: ProcessDocument[]; // Array nativo no Firestore
+  messages?: ChatMessage[]; // Opcional - pode usar subcoleção
+  extra_fields?: CustomField[]; // Array nativo no Firestore
   has_unread?: boolean;
   // Novos campos para sistema de porcentagens
   progress?: number; // Calculado automaticamente via getProgressPercentage

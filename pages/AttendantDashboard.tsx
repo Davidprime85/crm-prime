@@ -6,7 +6,7 @@ import { KanbanBoard } from '../components/KanbanBoard';
 import { StageInputModal } from '../components/StageInputModal';
 import { NotificationSelector } from '../components/NotificationSelector';
 import { notificationService } from '../services/notificationService';
-import { dataService } from '../services/dataService';
+import { firestoreService } from '../services/firestoreService'; // Migrado para Firestore
 import { authService } from '../services/authService';
 import { emailService } from '../services/emailService';
 import {
@@ -61,7 +61,7 @@ export const AttendantDashboard: React.FC = () => {
   const loadData = async () => {
     const user = await authService.getCurrentUser();
     if (user) {
-      const data = await dataService.getProcesses('attendant', user.id);
+      const data = await firestoreService.getProcesses('attendant', user.id);
       setProcesses(data);
     }
     setLoading(false);
@@ -83,7 +83,7 @@ export const AttendantDashboard: React.FC = () => {
     }));
 
     try {
-      await dataService.updateDocument(docId, { status: newStatus, url, feedback });
+      await firestoreService.updateDocument(docId, { status: newStatus, url, feedback });
     } catch (e) {
       alert('Erro ao salvar alteração.');
     }
@@ -112,7 +112,7 @@ export const AttendantDashboard: React.FC = () => {
           ]
         };
 
-        await dataService.createProcess(processData);
+        await firestoreService.createProcess(processData);
         await emailService.sendWelcomeEmail(newClient.email, newClient.name);
 
         alert('Cliente cadastrado com sucesso!');
@@ -132,7 +132,7 @@ export const AttendantDashboard: React.FC = () => {
   const handleAddDocument = async (docName: string) => {
     if (!selectedProcessId) return;
     try {
-      await dataService.addDocument(selectedProcessId, docName);
+      await firestoreService.addDocument(selectedProcessId, docName);
       loadData();
     } catch (e) {
       alert("Erro ao adicionar documento.");
@@ -150,7 +150,7 @@ export const AttendantDashboard: React.FC = () => {
 
       const process = processes.find(p => p.id === processId);
       if (process) {
-        await dataService.updateProcessStatus(processId, targetStage, data);
+        await firestoreService.updateProcessStatus(processId, targetStage, data);
       }
 
       setStageModal({ isOpen: false, processId: '', targetStage: 'credit_analysis' });

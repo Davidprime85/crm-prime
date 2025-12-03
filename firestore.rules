@@ -1,0 +1,102 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ============================================
+    // HELPER FUNCTIONS
+    // ============================================
+    
+    // Verifica se o usuário está autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Verifica se o usuário é admin
+    function isAdmin() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Verifica se o usuário é atendente
+    function isAttendant() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'attendant';
+    }
+    
+    // Verifica se o usuário é cliente
+    function isClient() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'client';
+    }
+    
+    // Verifica se o cliente é dono do processo
+    function isProcessOwner(processId) {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/processes/$(processId)).data.client_id == request.auth.uid;
+    }
+    
+    // ============================================
+    // COLEÇÃO: users
+    // ============================================
+    match /users/{userId} {
+      // Admin pode ler e escrever tudo
+      allow read, write: if isAdmin();
+      
+      // Usuário pode ler apenas seu próprio documento
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Atendente pode ler todos os usuários
+      allow read: if isAttendant();
+    }
+    
+    // ============================================
+    // COLEÇÃO: processes
+    // ============================================
+    match /processes/{processId} {
+      
+      // ADMIN: Pode ler e escrever TUDO
+      allow read, write: if isAdmin();
+      
+      // ATENDENTE: Pode ler TUDO
+      allow read: if isAttendant();
+      
+      // ATENDENTE: Pode editar apenas campos específicos
+      allow update: if isAttendant() && 
+                       onlyUpdatingFields(['status', 'notes', 'updated_at', 'extra_fields', 'documents']);
+      
+      // CLIENTE: Só pode ler seus próprios processos
+      allow read: if isClient() && resource.data.client_id == request.auth.uid;
+      
+      // CLIENTE: NÃO pode editar o processo
+      allow update, delete: if false;
+      
+      // ============================================
+      // SUBCOLEÇÃO: messages (Chat)
+      // ============================================
+      match /messages/{messageId} {
+        
+        // ADMIN: Pode ler e escrever tudo
+        allow read, write: if isAdmin();
+        
+        // ATENDENTE: Pode ler e escrever tudo
+        allow read, write: if isAttendant();
+        
+        // CLIENTE: Só pode ler/escrever mensagens do seu próprio processo
+        allow read: if isClient() && isProcessOwner(processId);
+        allow create: if isClient() && 
+                         isProcessOwner(processId) && 
+                         request.resource.data.sender_id == request.auth.uid;
+        
+        // CLIENTE: Não pode editar ou deletar mensagens
+        allow update, delete: if false;
+      }
+    }
+    
+    // ============================================
+    // FUNÇÃO AUXILIAR: Verificar campos permitidos
+    // ============================================
+    function onlyUpdatingFields(allowedFields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedFields);
+    }
+  }
+}

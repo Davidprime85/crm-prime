@@ -8,7 +8,7 @@ import { KanbanBoard } from '../components/KanbanBoard';
 import { StageInputModal } from '../components/StageInputModal';
 import { NotificationSelector } from '../components/NotificationSelector';
 import { notificationService } from '../services/notificationService';
-import { dataService } from '../services/dataService';
+import { firestoreService } from '../services/firestoreService'; // Migrado para Firestore
 import { authService } from '../services/authService';
 import { emailService } from '../services/emailService';
 import {
