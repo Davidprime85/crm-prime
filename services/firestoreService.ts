@@ -83,20 +83,21 @@ const firestoreToProcess = (doc: QueryDocumentSnapshot<DocumentData>): Process =
 /**
  * Converte Process para formato Firestore
  * Mescla extra_fields como Map na raiz do documento
+ * Sanitiza valores undefined para null (Firestore não aceita undefined)
  */
 const processToFirestore = (process: Partial<Process>): DocumentData => {
     const data: DocumentData = {
-        client_name: process.client_name,
-        client_id: process.client_id,
-        client_email: process.client_email,
-        client_cpf: process.client_cpf,
-        type: process.type,
-        status: process.status,
-        value: process.value,
-        attendant_id: process.attendant_id,
+        client_name: process.client_name ?? null,
+        client_id: process.client_id ?? null,
+        client_email: process.client_email ?? null,
+        client_cpf: process.client_cpf ?? null,
+        type: process.type ?? null,
+        status: process.status ?? 'credit_analysis',
+        value: process.value ?? 0,
+        attendant_id: process.attendant_id ?? null, // CRÍTICO: undefined → null
         documents: process.documents || [],
-        has_unread: process.has_unread || false,
-        progress: process.progress,
+        has_unread: process.has_unread ?? false,
+        progress: process.progress ?? null,
         auto_notifications_sent: process.auto_notifications_sent || []
     };
 
