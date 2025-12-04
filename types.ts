@@ -207,25 +207,26 @@ export interface CustomField {
 
 // Firestore: Process será armazenado em coleção /processes
 // Subcoleções possíveis: /processes/{id}/documents, /processes/{id}/messages
+// IMPORTANTE: Campos opcionais aceitam null (Firestore não aceita undefined)
 export interface Process {
   id: string;
   client_name: string;
   client_id: string;
-  client_email?: string;
-  client_cpf?: string;
+  client_email?: string | null;
+  client_cpf?: string | null;
   type: string;
   status: ProcessStatus;
   value: number;
   updated_at: string; // ISO string - converter de/para Firestore Timestamp
   created_at: string; // ISO string - converter de/para Firestore Timestamp
-  attendant_id?: string;
+  attendant_id?: string | null; // CRÍTICO: aceita null para Firestore
 
   documents: ProcessDocument[]; // Array nativo no Firestore
   messages?: ChatMessage[]; // Opcional - pode usar subcoleção
   extra_fields?: CustomField[]; // Array nativo no Firestore
   has_unread?: boolean;
   // Novos campos para sistema de porcentagens
-  progress?: number; // Calculado automaticamente via getProgressPercentage
+  progress?: number | null; // Calculado automaticamente via getProgressPercentage
   auto_notifications_sent?: string[]; // IDs das notificações já enviadas
 }
 
