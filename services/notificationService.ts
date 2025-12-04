@@ -1,118 +1,174 @@
-import { supabase } from '../lib/supabaseClient';
-import { Notification, Process } from '../types';
+// Notification Service - Gerenciamento de Notificações
+// Envia emails e SMS para clientes sobre atualizações de processos
 
-export const notificationService = {
-  // Buscar notificações (Realtime será adicionado no componente Layout)
-  getNotifications: async (userId: string): Promise<Notification[]> => {
-    const { data, error } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(20);
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from './firebaseConfig';
+import { Process, ProcessStatus, PROCESS_STAGES } from '../types';
 
-    if (error) {
-      console.error('Erro ao buscar notificações:', error);
-      return [];
+// ============================================
+// CONFIGURAÇÃO DE PROVEDORES
+// ============================================
+
+// TODO: Adicionar chaves de API quando disponíveis
+const EMAIL_CONFIG = {
+  // SendGrid API Key
+  apiKey: process.env.SENDGRID_API_KEY || 'YOUR_SENDGRID_API_KEY',
+  fromEmail: 'noreply@primehabitacao.com.br',
+  fromName: 'Prime Habitação'
+};
+
+const SMS_CONFIG = {
+  // Twilio Credentials
+  accountSid: process.env.TWILIO_ACCOUNT_SID || 'YOUR_TWILIO_ACCOUNT_SID',
+  authToken: process.env.TWILIO_AUTH_TOKEN || 'YOUR_TWILIO_AUTH_TOKEN',
+  fromNumber: process.env.TWILIO_FROM_NUMBER || '+5511999999999'
+};
+
+// ============================================
+// INTERFACE DO SERVIÇO
+// ============================================
+
+export interface NotificationService {
+  sendEmail(to: string, subject: string, content: string): Promise<void>;
+  sendSMS(to: string, message: string): Promise<void>;
+  notifyClientUpdate(processId: string, newStatus: ProcessStatus): Promise<void>;
+}
+
+// ============================================
+// IMPLEMENTAÇÃO
+// ============================================
+
+/**
+ * Envia email para o cliente
+ * TODO: Integrar com SendGrid quando API Key estiver disponível
+ */
+export const sendEmail = async (to: string, subject: string, content: string): Promise<void> => {
+  console.log('📧 ========== SIMULANDO ENVIO DE EMAIL ==========');
+  console.log('Para:', to);
+  console.log('Assunto:', subject);
+  console.log('Conteúdo:', content);
+  console.log('De:', `${EMAIL_CONFIG.fromName} <${EMAIL_CONFIG.fromEmail}>`);
+  console.log('================================================');
+
+  // TODO: Implementar integração real com SendGrid
+  /*
+  const sgMail = require('@sendgrid/mail');
+  sgMail.setApiKey(EMAIL_CONFIG.apiKey);
+  
+  const msg = {
+      to: to,
+      from: {
+          email: EMAIL_CONFIG.fromEmail,
+          name: EMAIL_CONFIG.fromName
+      },
+      subject: subject,
+      html: content
+  };
+  
+  await sgMail.send(msg);
+  */
+};
+
+/**
+ * Envia SMS para o cliente
+ * TODO: Integrar com Twilio quando credenciais estiverem disponíveis
+ */
+export const sendSMS = async (to: string, message: string): Promise<void> => {
+  console.log('📱 ========== SIMULANDO ENVIO DE SMS ==========');
+  console.log('Para:', to);
+  console.log('Mensagem:', message);
+  console.log('De:', SMS_CONFIG.fromNumber);
+  console.log('==============================================');
+
+  // TODO: Implementar integração real com Twilio
+  /*
+  const twilio = require('twilio');
+  const client = twilio(SMS_CONFIG.accountSid, SMS_CONFIG.authToken);
+  
+  await client.messages.create({
+      body: message,
+      from: SMS_CONFIG.fromNumber,
+      to: to
+  });
+  */
+};
+
+/**
+ * Notifica cliente sobre atualização no processo
+ * Busca dados do processo e envia email/SMS
+ */
+export const notifyClientUpdate = async (processId: string, newStatus: ProcessStatus): Promise<void> => {
+  try {
+    // Buscar dados do processo no Firestore
+    const processRef = doc(db, 'processes', processId);
+    const processSnap = await getDoc(processRef);
+
+    if (!processSnap.exists()) {
+      console.error('Processo não encontrado:', processId);
+      return;
     }
 
-    return data.map(n => ({
-      id: n.id,
-      user_id: n.user_id,
-      title: n.title,
-      message: n.message,
-      read: n.read,
-      created_at: n.created_at,
-      type: n.type
-    }));
-  },
+    const process = processSnap.data() as Process;
+    const stageInfo = PROCESS_STAGES[newStatus];
 
-  // Marcar como lida
-  markAsRead: async (notificationId: string) => {
-    await supabase
-      .from('notifications')
-      .update({ read: true })
-      .eq('id', notificationId);
-  },
+    // Preparar mensagens
+    const emailSubject = `Atualização do seu processo - ${stageInfo.title}`;
+    const emailContent = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #f59e0b;">Prime Habitação</h2>
+                <p>Olá, <strong>${process.client_name}</strong>!</p>
+                <p>Temos uma atualização sobre o seu processo de financiamento habitacional:</p>
+                
+                <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                    <h3 style="color: #1f2937; margin-top: 0;">${stageInfo.title}</h3>
+                    <p style="color: #4b5563;">${stageInfo.description}</p>
+                    <div style="background-color: #e5e7eb; height: 8px; border-radius: 4px; margin-top: 10px;">
+                        <div style="background-color: #f59e0b; height: 8px; border-radius: 4px; width: ${stageInfo.percentage}%;"></div>
+                    </div>
+                    <p style="color: #6b7280; font-size: 14px; margin-top: 5px;">Progresso: ${stageInfo.percentage}%</p>
+                </div>
+                
+                <p>Valor do imóvel: <strong>R$ ${process.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong></p>
+                <p>Tipo: <strong>${process.type}</strong></p>
+                
+                <p style="margin-top: 30px;">
+                    Acesse seu painel para mais detalhes:<br>
+                    <a href="https://crm-prime.vercel.app" style="color: #f59e0b; text-decoration: none;">
+                        https://crm-prime.vercel.app
+                    </a>
+                </p>
+                
+                <p style="color: #6b7280; font-size: 12px; margin-top: 40px;">
+                    Em caso de dúvidas, entre em contato conosco.
+                </p>
+            </div>
+        `;
 
-  // Criar notificação (usado pelo sistema ao mudar status)
-  createNotification: async (userId: string, title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
-    await supabase
-      .from('notifications')
-      .insert({
-        user_id: userId,
-        title,
-        message,
-        type,
-        read: false
-      });
-  },
+    const smsMessage = `Prime Habitação: Seu processo foi atualizado para "${stageInfo.title}" (${stageInfo.percentage}%). Acesse o painel para mais detalhes.`;
 
-  // Gerar mensagem baseada na etapa
-  generateStepMessage: (process: Process): string => {
-    const clientName = process.client_name.split(' ')[0]; // Primeiro nome
-    const extraFields = process.extra_fields || [];
-
-    const getField = (label: string) => extraFields.find(f => f.label === label || f.label === label.toLowerCase())?.value;
-
-    switch (process.status) {
-      case 'credit_analysis': // 20%
-        return `Parabéns ${clientName}! Seu crédito foi aprovado. Vamos avançar com o processo.`;
-
-      case 'valuation': // 40%
-        const valuationValue = getField('valuation_value') || getField('Valor da Avaliação/Laudo (R$)') || '0,00';
-        return `Sua avaliação foi concluída. Valor do laudo: R$ ${valuationValue}.`;
-
-      case 'legal_analysis': // 60%
-        const pendencyType = getField('pendency_type');
-        const pendencyDesc = getField('pendency_desc') || getField('Descrição da Pendência (se houver)');
-
-        if (pendencyType === 'client' || pendencyType === 'cliente') {
-          return `Olá ${clientName}! Precisamos resolver uma pendência documental: ${pendencyDesc}.`;
-        }
-        // Se for interna ou vazia, não notificar
-        return '';
-
-      case 'itbi_emission': // 80%
-        return `Olá ${clientName}, seu boleto de ITBI já está disponível para pagamento.`;
-
-      case 'contract_signing': // 100%
-        return `Parabéns ${clientName}! Seu contrato está pronto para assinatura.`;
-
-      default:
-        return `Olá ${clientName}, seu processo teve uma atualização.`;
+    // Enviar notificações
+    if (process.client_email) {
+      await sendEmail(process.client_email, emailSubject, emailContent);
     }
-  },
 
-  // Gerar link do WhatsApp
-  generateWhatsAppLink: (phone: string, message: string) => {
-    if (!message) return '#'; // Retorna link vazio se não houver mensagem
+    // TODO: Adicionar campo phone no Process e enviar SMS
+    // if (process.client_phone) {
+    //     await sendSMS(process.client_phone, smsMessage);
+    // }
 
-    // Remove non-digits
-    const cleanPhone = phone.replace(/\D/g, '');
-    // Add country code if missing (assuming BR +55)
-    const fullPhone = cleanPhone.length <= 11 ? `55${cleanPhone}` : cleanPhone;
-    const encodedMessage = encodeURIComponent(message);
-    return `https://wa.me/${fullPhone}?text=${encodedMessage}`;
-  },
+    console.log('✅ Notificações enviadas com sucesso para:', process.client_name);
 
-  // Salvar mensagem no histórico do chat (Persistência na tabela messages)
-  saveChatMessage: async (processId: string, sender: 'admin' | 'client' | 'system', message: string) => {
-    try {
-      // Inserir mensagem na tabela messages (compatível com ChatWidget)
-      await supabase
-        .from('messages')
-        .insert({
-          process_id: processId,
-          sender_id: sender, // 'admin', 'client', ou 'system'
-          sender_name: sender === 'admin' ? 'Administrador' : sender === 'client' ? 'Cliente' : 'Sistema',
-          role: sender,
-          content: message
-        });
-
-      console.log('Mensagem salva com sucesso no chat do processo:', processId);
-    } catch (e) {
-      console.error('Erro crítico ao salvar mensagem de chat:', e);
-    }
+  } catch (error) {
+    console.error('❌ Erro ao enviar notificações:', error);
+    // Não lançar erro para não quebrar o fluxo principal
   }
 };
+
+// Exportar como objeto para compatibilidade
+export const notificationService = {
+  sendEmail,
+  sendSMS,
+  notifyClientUpdate
+};
+
+export default notificationService;

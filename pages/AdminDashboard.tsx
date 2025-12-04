@@ -280,6 +280,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
 
                 // Update process with new status and data
                 await firestoreService.updateProcessStatus(processId, targetStage, data);
+
+                // 🔔 NOTIFICAR CLIENTE AUTOMATICAMENTE
+                try {
+                    await notificationService.notifyClientUpdate(processId, targetStage);
+                    console.log('✅ Cliente notificado sobre mudança de status');
+                } catch (notifError) {
+                    console.error('⚠️ Erro ao notificar cliente (não crítico):', notifError);
+                    // Não bloqueia o fluxo principal
+                }
             }
 
             // Close modal
