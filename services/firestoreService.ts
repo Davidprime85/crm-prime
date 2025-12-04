@@ -20,8 +20,38 @@ import { db } from './firebaseConfig';
 import { Process, ProcessDocument, ChatMessage, ProcessStatus, CustomField } from '../types';
 
 // ============================================
-// HELPERS - Conversão de Dados
+// HELPERS - Conversão e Sanitização de Dados
 // ============================================
+
+/**
+ * Remove valores undefined de um objeto (Firestore não aceita undefined)
+ * Converte undefined → null recursivamente
+ */
+const cleanData = (data: any): any => {
+    if (data === null || data === undefined) {
+        return null;
+    }
+
+    if (Array.isArray(data)) {
+        return data.map(item => cleanData(item));
+    }
+
+    if (typeof data === 'object' && data !== null) {
+        const cleaned: any = {};
+        Object.keys(data).forEach(key => {
+            const value = data[key];
+            // Remove undefined, mantém null
+            if (value !== undefined) {
+                cleaned[key] = cleanData(value);
+            } else {
+                cleaned[key] = null;
+            }
+        });
+        return cleaned;
+    }
+
+    return data;
+};
 
 /**
  * Converte Firestore Timestamp para ISO string
@@ -171,6 +201,7 @@ export const firestoreService = {
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
                 status: processData.status || 'credit_analysis',
+                attendant_id: processData.attendant_id || null, // Força null se undefined
                 documents: processData.documents || [
                     { id: 'doc1', name: 'RG e CPF', status: 'pending' },
                     { id: 'doc2', name: 'Comprovante de Renda', status: 'pending' },
@@ -178,7 +209,10 @@ export const firestoreService = {
                 ]
             });
 
-            const docRef = await addDoc(collection(db, 'processes'), data);
+            // SANITIZAÇÃO CRÍTICA: Remove todos os undefined
+            const safeData = cleanData(data);
+
+            const docRef = await addDoc(collection(db, 'processes'), safeData);
             return docRef.id;
         } catch (error) {
             console.error('Erro ao criar processo:', error);
@@ -211,11 +245,14 @@ export const firestoreService = {
                 ...stageData
             };
 
-            await updateDoc(processRef, {
+            // SANITIZAÇÃO: Remove undefined
+            const updateData = cleanData({
                 status: newStatus,
                 extra_fields: updatedExtraFields,
                 updated_at: serverTimestamp()
             });
+
+            await updateDoc(processRef, updateData);
         } catch (error) {
             console.error('Erro ao atualizar status:', error);
             throw error;
@@ -263,13 +300,16 @@ export const firestoreService = {
 
             const documents = processSnap.data().documents || [];
             const updatedDocuments = documents.map((doc: ProcessDocument) =>
-                doc.id === docId ? { ...doc, ...updates } : doc
+                doc.id === docId ? { ...doc, ...cleanData(updates) } : doc
             );
 
-            await updateDoc(processRef, {
+            // SANITIZAÇÃO: Remove undefined
+            const updateData = cleanData({
                 documents: updatedDocuments,
                 updated_at: serverTimestamp()
             });
+
+            await updateDoc(processRef, updateData);
         } catch (error) {
             console.error('Erro ao atualizar documento:', error);
             throw error;
