@@ -7,12 +7,12 @@ import { getAuth } from 'firebase/auth';
 
 // Configuração do Firebase
 const firebaseConfig = {
-    apiKey: "AIzaSyB4xfQznWEaMt2n_YapcWKigNObpjxVL6A",
-    authDomain: "crm-prime-habitacao-af481.firebaseapp.com",
-    projectId: "crm-prime-habitacao-af481",
-    storageBucket: "crm-prime-habitacao-af481.firebasestorage.app",
-    messagingSenderId: "785256680426",
-    appId: "1:785256680426:web:b37836b60a7148dd884093"
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 // Inicializar Firebase
