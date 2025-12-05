@@ -7,7 +7,7 @@ import { KanbanBoard } from '../components/KanbanBoard';
 
 import { StageInputModal } from '../components/StageInputModal';
 import { NotificationSelector } from '../components/NotificationSelector';
-import { notificationService } from '../services/notificationService';
+import notificationService from '../services/notificationService';
 import { firestoreService } from '../services/firestoreService'; // Migrado para Firestore
 import { authService } from '../services/authService';
 import { emailService } from '../services/emailService';
@@ -326,8 +326,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
             if (channel === 'chat') {
                 await notificationService.saveChatMessage(
                     notificationModal.process.id,
+                    message,
                     'admin',
-                    message
+                    'admin'
                 );
                 alert('Mensagem salva no chat do processo!');
             } else {

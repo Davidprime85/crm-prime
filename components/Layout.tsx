@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LogOut, User as UserIcon, LayoutDashboard, FileText, Settings, Calculator, Bell, Menu, X, MessageCircle } from 'lucide-react';
 import { User, Notification } from '../types';
-import { notificationService } from '../services/notificationService';
+import notificationService from '../services/notificationService';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 interface LayoutProps {

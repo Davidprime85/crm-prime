@@ -38,7 +38,7 @@ interface NotificationService {
   saveChatMessage: (processId: string, message: string, senderId: string, senderRole: string) => Promise<void>;
 }
 
-const notificationService: NotificationService = {
+export const notificationService: NotificationService = {
 
   // =================================================================
   // 1. ENVIO DE E-MAILS (CONECTADO AO RESEND/VERCEL)

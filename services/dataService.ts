@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabaseClient';
 import { Process, ProcessDocument, KPIMetrics } from '../types';
-import { notificationService } from './notificationService';
+import notificationService from './notificationService';
 
 export const dataService = {
 
