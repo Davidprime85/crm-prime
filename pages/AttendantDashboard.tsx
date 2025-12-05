@@ -173,8 +173,9 @@ export const AttendantDashboard: React.FC = () => {
       if (channel === 'chat') {
         await notificationService.saveChatMessage(
           notificationModal.process.id,
-          'admin',
-          message
+          message,
+          'attendant',
+          'attendant'
         );
         alert('Mensagem salva no chat do processo!');
       } else {

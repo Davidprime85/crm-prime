@@ -12,29 +12,19 @@ import {
   limit,
   Timestamp
 } from 'firebase/firestore';
-
-// Interface para o objeto de Notificação
-export interface Notification {
-  id: string;
-  userId: string;
-  message: string;
-  read: boolean;
-  createdAt: any;
-  type?: 'info' | 'warning' | 'success' | 'error';
-  link?: string;
-}
+import { Notification } from '../types'; // Importar de types.ts
 
 // Interface do Serviço
 interface NotificationService {
-  // Funções de Email/SMS (Novas)
+  // Funções de Email/SMS
   sendEmail: (to: string, subject: string, content: string) => Promise<void>;
   sendSMS: (to: string, message: string) => Promise<void>;
   notifyClientUpdate: (processId: string, status: string, clientEmail?: string, clientName?: string) => Promise<void>;
 
-  // Funções de Sistema/Chat (Restauradas)
+  // Funções de Sistema/Chat
   getNotifications: (userId: string) => Promise<Notification[]>;
   markAsRead: (notificationId: string) => Promise<void>;
-  createNotification: (userId: string, message: string, type?: 'info' | 'warning' | 'success' | 'error', link?: string) => Promise<void>;
+  createNotification: (userId: string, title: string, message: string, type?: 'info' | 'warning' | 'success' | 'error', link?: string) => Promise<void>;
   saveChatMessage: (processId: string, message: string, senderId: string, senderRole: string) => Promise<void>;
 }
 
@@ -64,7 +54,7 @@ export const notificationService: NotificationService = {
     console.log(`📱 [Simulação SMS] Para: ${to} | Msg: ${message}`);
   },
 
-  // Atualiza status e avisa o cliente (Aceita 4 argumentos agora para corrigir o erro TS2554)
+  // Atualiza status e avisa o cliente
   notifyClientUpdate: async (processId: string, status: string, clientEmail?: string, clientName?: string) => {
     try {
       // 1. Cria notificação no sistema
@@ -104,20 +94,31 @@ export const notificationService: NotificationService = {
   },
 
   // =================================================================
-  // 2. FUNÇÕES DO SISTEMA (RESTAUROU O QUE FALTAVA)
+  // 2. FUNÇÕES DO SISTEMA
   // =================================================================
 
-  // Busca notificações do usuário (Para o ícone de sino)
+  // Busca notificações do usuário
   getNotifications: async (userId: string) => {
     try {
       const q = query(
         collection(db, 'notifications'),
-        where('userId', '==', userId),
-        orderBy('createdAt', 'desc'),
+        where('user_id', '==', userId), // snake_case
+        orderBy('created_at', 'desc'), // snake_case
         limit(10)
       );
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
+      return snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          user_id: data.user_id,
+          title: data.title || 'Notificação',
+          message: data.message,
+          read: data.read,
+          type: data.type || 'info',
+          created_at: data.created_at?.toDate?.().toISOString() || new Date().toISOString()
+        } as Notification;
+      });
     } catch (error) {
       console.error("Erro ao buscar notificações:", error);
       return [];
@@ -134,16 +135,17 @@ export const notificationService: NotificationService = {
     }
   },
 
-  // Cria notificação interna (usado pelo dataService)
-  createNotification: async (userId: string, message: string, type = 'info', link?: string) => {
+  // Cria notificação interna
+  createNotification: async (userId: string, title: string, message: string, type = 'info', link?: string) => {
     try {
       await addDoc(collection(db, 'notifications'), {
-        userId,
+        user_id: userId, // snake_case
+        title,
         message,
         type,
         link,
         read: false,
-        createdAt: Timestamp.now() // Usa Timestamp do Firestore
+        created_at: Timestamp.now() // snake_case
       });
     } catch (error) {
       console.error("Erro ao criar notificação:", error);
