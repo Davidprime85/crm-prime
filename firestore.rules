@@ -1,102 +1,78 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // ============================================
-    // HELPER FUNCTIONS
-    // ============================================
-    
-    // Verifica se o usuário está autenticado
+    // Helper Functions
     function isAuthenticated() {
       return request.auth != null;
     }
     
-    // Verifica se o usuário é admin
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function getUserRole() {
+      return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role;
+    }
+    
     function isAdmin() {
-      return isAuthenticated() && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return isAuthenticated() && getUserRole() == 'admin';
     }
     
-    // Verifica se o usuário é atendente
     function isAttendant() {
-      return isAuthenticated() && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'attendant';
+      return isAuthenticated() && getUserRole() == 'attendant';
     }
     
-    // Verifica se o usuário é cliente
     function isClient() {
-      return isAuthenticated() && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'client';
+      return isAuthenticated() && getUserRole() == 'client';
     }
     
-    // Verifica se o cliente é dono do processo
-    function isProcessOwner(processId) {
-      return isAuthenticated() && 
-             get(/databases/$(database)/documents/processes/$(processId)).data.client_id == request.auth.uid;
+    // ============= PROFILES =============
+    match /profiles/{userId} {
+      // Usuários podem ler e atualizar seus próprios perfis
+      allow read: if isOwner(userId) || isAdmin() || isAttendant();
+      allow update: if isOwner(userId);
+      allow create: if isOwner(userId); // Criado durante registro
+      allow delete: if isAdmin();
     }
     
-    // ============================================
-    // COLEÇÃO: users
-    // ============================================
-    match /users/{userId} {
-      // Admin pode ler e escrever tudo
-      allow read, write: if isAdmin();
-      
-      // Usuário pode ler apenas seu próprio documento
-      allow read: if isAuthenticated() && request.auth.uid == userId;
-      
-      // Atendente pode ler todos os usuários
-      allow read: if isAttendant();
-    }
-    
-    // ============================================
-    // COLEÇÃO: processes
-    // ============================================
+    // ============= PROCESSES =============
     match /processes/{processId} {
+      // Admin e Attendant podem ler todos
+      allow read: if isAdmin() || isAttendant();
       
-      // ADMIN: Pode ler e escrever TUDO
-      allow read, write: if isAdmin();
-      
-      // ATENDENTE: Pode ler TUDO
-      allow read: if isAttendant();
-      
-      // ATENDENTE: Pode editar apenas campos específicos
-      allow update: if isAttendant() && 
-                       onlyUpdatingFields(['status', 'notes', 'updated_at', 'extra_fields', 'documents']);
-      
-      // CLIENTE: Só pode ler seus próprios processos
+      // Cliente pode ler apenas seus próprios processos
       allow read: if isClient() && resource.data.client_id == request.auth.uid;
       
-      // CLIENTE: NÃO pode editar o processo
-      allow update, delete: if false;
+      // Admin e Attendant podem criar e atualizar
+      allow create, update: if isAdmin() || isAttendant();
       
-      // ============================================
-      // SUBCOLEÇÃO: messages (Chat)
-      // ============================================
+      // Apenas Admin pode deletar
+      allow delete: if isAdmin();
+      
+      // ============= MESSAGES (Subcoleção) =============
       match /messages/{messageId} {
+        // Permite ler mensagens do processo se tem acesso ao processo
+        allow read: if isAdmin() || 
+                       isAttendant() || 
+                       (isClient() && get(/databases/$(database)/documents/processes/$(processId)).data.client_id == request.auth.uid);
         
-        // ADMIN: Pode ler e escrever tudo
-        allow read, write: if isAdmin();
+        // Permite criar mensagens se tem acesso ao processo
+        allow create: if isAuthenticated() && 
+                         (isAdmin() || 
+                          isAttendant() || 
+                          (isClient() && get(/databases/$(database)/documents/processes/$(processId)).data.client_id == request.auth.uid));
         
-        // ATENDENTE: Pode ler e escrever tudo
-        allow read, write: if isAttendant();
-        
-        // CLIENTE: Só pode ler/escrever mensagens do seu próprio processo
-        allow read: if isClient() && isProcessOwner(processId);
-        allow create: if isClient() && 
-                         isProcessOwner(processId) && 
-                         request.resource.data.sender_id == request.auth.uid;
-        
-        // CLIENTE: Não pode editar ou deletar mensagens
+        // Ninguém pode atualizar ou deletar mensagens
         allow update, delete: if false;
       }
     }
     
-    // ============================================
-    // FUNÇÃO AUXILIAR: Verificar campos permitidos
-    // ============================================
-    function onlyUpdatingFields(allowedFields) {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedFields);
+    // ============= FALLBACK =============
+    // Bloquear tudo que não está explicitamente permitido
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

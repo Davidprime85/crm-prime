@@ -1,79 +1,87 @@
-import { supabase } from '../lib/supabaseClient';
+import { auth, db } from './firebaseConfig';
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  User as FirebaseUser
+} from 'firebase/auth';
+import { doc, getDoc, setDoc, collection } from 'firebase/firestore';
 import { User, UserRole } from '../types';
 
 export const authService = {
 
   loginWithPassword: async (email: string, password: string): Promise<{ user: User | null; error: string | null }> => {
     try {
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const firebaseUser = userCredential.user;
 
-      if (authError) return { user: null, error: 'Email ou senha incorretos.' };
-      if (!authData.user) return { user: null, error: 'Usuário não encontrado.' };
+      if (!firebaseUser) return { user: null, error: 'Usuário não encontrado.' };
 
-      // Tenta buscar perfil
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authData.user.id)
-        .single();
+      // Busca perfil do usuário no Firestore
+      const profileRef = doc(db, 'profiles', firebaseUser.uid);
+      const profileSnap = await getDoc(profileRef);
+
+      let role: UserRole = 'client';
+      let name = firebaseUser.email || 'Usuário';
+      let avatar_url: string | undefined;
 
       // HARDCODE DE SEGURANÇA: Se for o David, força ADMIN
-      let role: UserRole = 'client';
-      if (authData.user.email?.toLowerCase() === 'david@creditoprime.com.br') {
+      if (firebaseUser.email?.toLowerCase() === 'david@creditoprime.com.br') {
         role = 'admin';
-      } else if (profile && profile.role) {
-        role = profile.role as UserRole;
+      } else if (profileSnap.exists()) {
+        const profileData = profileSnap.data();
+        role = profileData.role as UserRole || 'client';
+        name = profileData.name || name;
+        avatar_url = profileData.avatar_url;
       }
 
-      // Nome Fallback
-      const name = profile?.name || authData.user.email || 'Usuário';
-
       const user: User = {
-        id: authData.user.id,
-        email: authData.user.email || '',
+        id: firebaseUser.uid,
+        email: firebaseUser.email || '',
         name: name,
         role: role,
-        avatar_url: profile?.avatar_url
+        avatar_url: avatar_url
       };
 
       return { user, error: null };
     } catch (e: any) {
-      return { user: null, error: e.message };
+      console.error('Erro no login:', e);
+      if (e.code === 'auth/invalid-credential') {
+        return { user: null, error: 'Email ou senha incorretos.' };
+      }
+      if (e.code === 'auth/user-not-found') {
+        return { user: null, error: 'Usuário não encontrado.' };
+      }
+      if (e.code === 'auth/wrong-password') {
+        return { user: null, error: 'Senha incorreta.' };
+      }
+      return { user: null, error: 'Erro ao fazer login. Tente novamente.' };
     }
   },
 
   register: async (email: string, password: string, name: string): Promise<{ user: User | null; error: string | null }> => {
     try {
-      // 1. Cria usuário na Auth do Supabase
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { name } }
+      // 1. Cria usuário no Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const firebaseUser = userCredential.user;
+
+      if (!firebaseUser) return { user: null, error: 'Erro ao criar usuário.' };
+
+      // 2. Cria perfil no Firestore
+      const profileRef = doc(db, 'profiles', firebaseUser.uid);
+      await setDoc(profileRef, {
+        id: firebaseUser.uid,
+        email: email,
+        name: name,
+        role: 'client',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       });
 
-      if (authError) return { user: null, error: authError.message };
-      if (!authData.user) return { user: null, error: 'Erro ao criar usuário.' };
-
-      // 2. Cria perfil na tabela profiles
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          id: authData.user.id,
-          email: email,
-          name: name,
-          role: 'client' // O Trigger do banco vai mudar para 'attendant' se o email estiver autorizado
-        });
-
-      if (profileError) {
-        console.error('Erro ao criar perfil:', profileError);
-      }
-
       const user: User = {
-        id: authData.user.id,
-        email: authData.user.email || '',
+        id: firebaseUser.uid,
+        email: firebaseUser.email || '',
         name: name,
         role: 'client'
       };
@@ -81,37 +89,54 @@ export const authService = {
       return { user, error: null };
 
     } catch (e: any) {
-      return { user: null, error: e.message };
+      console.error('Erro no registro:', e);
+      if (e.code === 'auth/email-already-in-use') {
+        return { user: null, error: 'Este email já está cadastrado.' };
+      }
+      if (e.code === 'auth/weak-password') {
+        return { user: null, error: 'A senha deve ter pelo menos 6 caracteres.' };
+      }
+      if (e.code === 'auth/invalid-email') {
+        return { user: null, error: 'Email inválido.' };
+      }
+      return { user: null, error: e.message || 'Erro ao criar conta.' };
     }
   },
 
   logout: async (): Promise<void> => {
-    await supabase.auth.signOut();
+    await signOut(auth);
   },
 
   getCurrentUser: async (): Promise<User | null> => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) return null;
+    const firebaseUser = auth.currentUser;
+    if (!firebaseUser) return null;
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', session.user.id)
-      .single();
+    try {
+      // Busca perfil do Firestore
+      const profileRef = doc(db, 'profiles', firebaseUser.uid);
+      const profileSnap = await getDoc(profileRef);
 
-    // HARDCODE DE SEGURANÇA: Se for o David, força ADMIN
-    let role: UserRole = 'client';
-    if (session.user.email?.toLowerCase() === 'david@creditoprime.com.br') {
-      role = 'admin';
-    } else if (profile && profile.role) {
-      role = profile.role as UserRole;
+      let role: UserRole = 'client';
+      let name = firebaseUser.email || 'Usuário';
+
+      // HARDCODE DE SEGURANÇA: Se for o David, força ADMIN
+      if (firebaseUser.email?.toLowerCase() === 'david@creditoprime.com.br') {
+        role = 'admin';
+      } else if (profileSnap.exists()) {
+        const profileData = profileSnap.data();
+        role = profileData.role as UserRole || 'client';
+        name = profileData.name || name;
+      }
+
+      return {
+        id: firebaseUser.uid,
+        email: firebaseUser.email || '',
+        name: name,
+        role: role,
+      };
+    } catch (e) {
+      console.error('Erro ao buscar usuário atual:', e);
+      return null;
     }
-
-    return {
-      id: session.user.id,
-      email: session.user.email || '',
-      name: profile?.name || session.user.email || 'Usuário',
-      role: role,
-    };
   }
 };

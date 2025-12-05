@@ -46,7 +46,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ processId, currentUser, 
       });
 
       return () => {
-        subscription.unsubscribe();
+        subscription(); // Unsubscribe é uma função, não um objeto
       };
     }
   }, [isOpen, processId]);

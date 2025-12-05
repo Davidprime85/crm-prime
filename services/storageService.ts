@@ -1,38 +1,39 @@
-import { supabase } from '../lib/supabaseClient';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import app from './firebaseConfig';
+
+const storage = getStorage(app);
 
 export const storageService = {
   /**
-   * Uploads a document to Supabase Storage
+   * Uploads a document to Firebase Storage
    */
   uploadDocument: async (processId: string, documentId: string, file: File): Promise<{ url: string; error: string | null }> => {
     try {
       // Sanitize filename
       const fileExt = file.name.split('.').pop();
-      const fileName = `${processId}/${documentId}_${Date.now()}.${fileExt}`;
-      
-      // 1. Upload file to 'documents' bucket
-      const { data, error } = await supabase.storage
-        .from('documents')
-        .upload(fileName, file, {
-            cacheControl: '3600',
-            upsert: false
-        });
+      const fileName = `documents/${processId}/${documentId}_${Date.now()}.${fileExt}`;
 
-      if (error) {
-        console.error('Supabase Storage Error:', error);
-        return { url: '', error: 'Erro ao salvar arquivo no servidor.' };
-      }
+      // 1. Create a storage reference
+      const storageRef = ref(storage, fileName);
 
-      // 2. Get public URL
-      const { data: publicUrlData } = supabase.storage
-        .from('documents')
-        .getPublicUrl(fileName);
-        
-      return { url: publicUrlData.publicUrl, error: null };
+      // 2. Upload file to Firebase Storage
+      const snapshot = await uploadBytes(storageRef, file, {
+        contentType: file.type,
+        customMetadata: {
+          processId,
+          documentId,
+          uploadedAt: new Date().toISOString()
+        }
+      });
+
+      // 3. Get download URL
+      const downloadURL = await getDownloadURL(snapshot.ref);
+
+      return { url: downloadURL, error: null };
 
     } catch (err: any) {
       console.error("Upload Exception:", err);
-      return { url: '', error: err.message };
+      return { url: '', error: err.message || 'Erro ao salvar arquivo no servidor.' };
     }
   }
 };

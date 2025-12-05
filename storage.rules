@@ -1,0 +1,46 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+             firestore.get(/databases/(default)/documents/profiles/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    function isAttendant() {
+      return isAuthenticated() && 
+             firestore.get(/databases/(default)/documents/profiles/$(request.auth.uid)).data.role == 'attendant';
+    }
+    
+    // ============= DOCUMENTS =============
+    // Estrutura: documents/{processId}/{documentId}_{timestamp}.{ext}
+    match /documents/{processId}/{documentFile} {
+      // Admin e Attendant podem ler todos os documentos
+      allow read: if isAdmin() || isAttendant();
+      
+      // Cliente pode ler apenas documentos do seu processo
+      allow read: if isAuthenticated() && 
+                     firestore.get(/databases/(default)/documents/processes/$(processId)).data.client_id == request.auth.uid;
+      
+      // Apenas Attendant e Admin podem fazer upload
+      allow write: if isAttendant() || isAdmin();
+      
+      // Validação de arquivo
+      allow create: if request.resource.size < 10 * 1024 * 1024 && // Máximo 10MB
+                       request.resource.contentType.matches('image/.*') || 
+                       request.resource.contentType == 'application/pdf';
+    }
+    
+    // ============= FALLBACK =============
+    // Bloquear tudo que não está explicitamente permitido
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -15,8 +15,20 @@ const firebaseConfig = {
     appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
+// DEBUG: Verificar se as variáveis foram carregadas
+console.log('🔥 Firebase Config:', {
+    apiKey: firebaseConfig.apiKey ? '✅ Loaded' : '❌ Missing',
+    authDomain: firebaseConfig.authDomain || '❌ Missing',
+    projectId: firebaseConfig.projectId || '❌ Missing',
+    storageBucket: firebaseConfig.storageBucket || '❌ Missing',
+    messagingSenderId: firebaseConfig.messagingSenderId || '❌ Missing',
+    appId: firebaseConfig.appId || '❌ Missing',
+});
+
 // Inicializar Firebase
 const app = initializeApp(firebaseConfig);
+
+console.log('✅ Firebase initialized successfully!');
 
 // Inicializar serviços - CONEXÃO PADRÃO (Database ID: default)
 export const db = getFirestore(app);
