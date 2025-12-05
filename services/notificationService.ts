@@ -1,54 +1,80 @@
 import { db } from './firebaseConfig';
-import { doc, getDoc } from 'firebase/firestore';
+import {
+  doc,
+  getDoc,
+  collection,
+  addDoc,
+  query,
+  where,
+  getDocs,
+  updateDoc,
+  orderBy,
+  limit,
+  Timestamp
+} from 'firebase/firestore';
 
+// Interface para o objeto de Notificação
+export interface Notification {
+  id: string;
+  userId: string;
+  message: string;
+  read: boolean;
+  createdAt: any;
+  type?: 'info' | 'warning' | 'success' | 'error';
+  link?: string;
+}
+
+// Interface do Serviço
 interface NotificationService {
+  // Funções de Email/SMS (Novas)
   sendEmail: (to: string, subject: string, content: string) => Promise<void>;
   sendSMS: (to: string, message: string) => Promise<void>;
   notifyClientUpdate: (processId: string, status: string, clientEmail?: string, clientName?: string) => Promise<void>;
+
+  // Funções de Sistema/Chat (Restauradas)
+  getNotifications: (userId: string) => Promise<Notification[]>;
+  markAsRead: (notificationId: string) => Promise<void>;
+  createNotification: (userId: string, message: string, type?: 'info' | 'warning' | 'success' | 'error', link?: string) => Promise<void>;
+  saveChatMessage: (processId: string, message: string, senderId: string, senderRole: string) => Promise<void>;
 }
 
 const notificationService: NotificationService = {
-  // 1. Função REAL de envio de e-mail (Conecta com seu backend /api/send-email)
+
+  // =================================================================
+  // 1. ENVIO DE E-MAILS (CONECTADO AO RESEND/VERCEL)
+  // =================================================================
   sendEmail: async (to: string, subject: string, content: string) => {
     try {
-      console.log(`📤 Tentando enviar email para ${to}...`);
+      console.log(`📤 [Resend] Enviando email para ${to}...`);
 
       const response = await fetch('/api/send-email', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          to,
-          subject,
-          html: content
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, subject, html: content }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Falha no envio');
-      }
-
-      console.log('✅ Email enviado com sucesso pelo Resend!');
+      if (!response.ok) throw new Error('Falha no envio via API');
+      console.log('✅ Email enviado com sucesso!');
     } catch (error) {
-      console.error('❌ Erro ao enviar email:', error);
-      // Não lançamos o erro (throw) para não travar o Kanban se o email falhar
+      console.error('❌ Erro no envio de email:', error);
     }
   },
 
-  // 2. Função de SMS (Por enquanto mantemos simulada até você decidir o provedor)
   sendSMS: async (to: string, message: string) => {
-    console.log(`📱 [SIMULAÇÃO SMS] Para: ${to} | Msg: ${message}`);
+    console.log(`📱 [Simulação SMS] Para: ${to} | Msg: ${message}`);
   },
 
-  // 3. Função Inteligente que monta a mensagem
+  // Atualiza status e avisa o cliente (Aceita 4 argumentos agora para corrigir o erro TS2554)
   notifyClientUpdate: async (processId: string, status: string, clientEmail?: string, clientName?: string) => {
     try {
-      // Se não vier email/nome, tenta buscar no banco
+      // 1. Cria notificação no sistema
+      // (Opcional: se tiver ID do cliente, cria notificação interna)
+
+      // 2. Tenta enviar E-mail
       let email = clientEmail;
       let name = clientName || 'Cliente';
 
+      // Se não veio o email, busca no banco
       if (!email) {
         const docRef = doc(db, 'processes', processId);
         const docSnap = await getDoc(docRef);
@@ -59,32 +85,83 @@ const notificationService: NotificationService = {
         }
       }
 
-      if (!email) {
-        console.warn('⚠️ Cancelando notificação: Email do cliente não encontrado.');
-        return;
-      }
-
-      // Monta o E-mail Bonito (HTML)
-      const emailSubject = `Atualização do Processo: ${status} - Prime Habitação`;
-      const emailHtml = `
-        <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #003366;">Olá, ${name}!</h2>
-          <p>Temos uma novidade sobre o seu financiamento.</p>
-          <div style="background-color: #f0f4f8; padding: 20px; border-left: 5px solid #003366; margin: 20px 0;">
-            <p style="margin: 0; font-size: 16px;">Novo Status:</p>
-            <h3 style="margin: 5px 0 0 0; color: #003366;">${status.toUpperCase()}</h3>
+      if (email) {
+        const subject = `Atualização: Seu processo mudou para ${status}`;
+        const html = `
+          <div style="font-family: sans-serif; padding: 20px; color: #333;">
+            <h2 style="color: #0044cc;">Olá, ${name}</h2>
+            <p>O status do seu processo foi atualizado para: <strong>${status.toUpperCase()}</strong></p>
+            <p>Acesse o portal para conferir os detalhes.</p>
+            <hr />
+            <small>Equipe Prime Habitação</small>
           </div>
-          <p>Acesse seu portal para ver mais detalhes e acompanhar o progresso.</p>
-          <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;" />
-          <p style="font-size: 12px; color: #999;">Esta é uma mensagem automática da Prime Habitação.</p>
-        </div>
-      `;
-
-      // Envia
-      await notificationService.sendEmail(email, emailSubject, emailHtml);
-
+        `;
+        await notificationService.sendEmail(email, subject, html);
+      }
     } catch (error) {
-      console.error('Erro no fluxo de notificação:', error);
+      console.error('Erro no notifyClientUpdate:', error);
+    }
+  },
+
+  // =================================================================
+  // 2. FUNÇÕES DO SISTEMA (RESTAUROU O QUE FALTAVA)
+  // =================================================================
+
+  // Busca notificações do usuário (Para o ícone de sino)
+  getNotifications: async (userId: string) => {
+    try {
+      const q = query(
+        collection(db, 'notifications'),
+        where('userId', '==', userId),
+        orderBy('createdAt', 'desc'),
+        limit(10)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
+    } catch (error) {
+      console.error("Erro ao buscar notificações:", error);
+      return [];
+    }
+  },
+
+  // Marca como lida
+  markAsRead: async (notificationId: string) => {
+    try {
+      const docRef = doc(db, 'notifications', notificationId);
+      await updateDoc(docRef, { read: true });
+    } catch (error) {
+      console.error("Erro ao marcar como lida:", error);
+    }
+  },
+
+  // Cria notificação interna (usado pelo dataService)
+  createNotification: async (userId: string, message: string, type = 'info', link?: string) => {
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        userId,
+        message,
+        type,
+        link,
+        read: false,
+        createdAt: Timestamp.now() // Usa Timestamp do Firestore
+      });
+    } catch (error) {
+      console.error("Erro ao criar notificação:", error);
+    }
+  },
+
+  // Salva mensagem de chat (usado pelo AdminDashboard/AttendantDashboard)
+  saveChatMessage: async (processId: string, message: string, senderId: string, senderRole: string) => {
+    try {
+      const messagesRef = collection(db, `processes/${processId}/messages`);
+      await addDoc(messagesRef, {
+        text: message,
+        senderId,
+        senderRole,
+        createdAt: Timestamp.now()
+      });
+    } catch (error) {
+      console.error("Erro ao salvar mensagem:", error);
     }
   }
 };
