@@ -283,7 +283,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ initialTab = 'da
 
                 // 🔔 NOTIFICAR CLIENTE AUTOMATICAMENTE
                 try {
-                    await notificationService.notifyClientUpdate(processId, targetStage);
+                    // Passar email e nome do cliente para evitar leitura extra no serviço
+                    const clientEmail = process.client_email || '';
+                    const clientName = process.client_name || 'Cliente';
+
+                    await notificationService.notifyClientUpdate(
+                        processId,
+                        targetStage,
+                        clientEmail,
+                        clientName
+                    );
                     console.log('✅ Cliente notificado sobre mudança de status');
                 } catch (notifError) {
                     console.error('⚠️ Erro ao notificar cliente (não crítico):', notifError);
